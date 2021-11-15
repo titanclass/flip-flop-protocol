@@ -16,7 +16,7 @@ Offsets are held as an unsigned 32 bit integer and may overflow to zero.
 
 The client assumes the addresses of its servers and cycles through each by sending a command and then opening its receive window for a pre-determined amount of time.
 
-A simplified data layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address, a server port, a opaque variable length payload, and a CRC for error checking.
+A simplified link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address, a server port, an opaque variable length payload, and a CRC for error checking.
 
 ## Why flip-flop?
 
