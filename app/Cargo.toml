@@ -1,0 +1,8 @@
+[package]
+authors = ["huntc <huntchr@gmail.com>"]
+edition = "2021"
+readme = "README.md"
+name = "flip-flop-app"
+version = "0.1.0"
+
+[dependencies]
