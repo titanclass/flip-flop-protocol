@@ -1,5 +1,6 @@
 use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
 
+use chrono::Local;
 use flip_flop_app::{Command, Event};
 use tokio::{
     net::UdpSocket,
@@ -68,11 +69,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
             time::timeout(Duration::from_millis(100), r.recv_from(&mut recv_buf)).await
         {
             if let Ok(event) = postcard::from_bytes::<Event<EventId>>(&recv_buf[..len]) {
-                println!(
-                    "CLIENT: {:?} event {} received from {:?}",
-                    event, event_count, remote_addr
-                );
-
+                if let Some(local_time) = Local::now().checked_sub_signed(
+                    chrono::Duration::from_std(Duration::from_secs(event.delta_ticks))
+                        .unwrap_or(chrono::Duration::seconds(0)),
+                ) {
+                    println!(
+                        "CLIENT: event time {:?} {:?} event {} received from {:?}",
+                        local_time, event, event_count, remote_addr
+                    );
+                }
                 if event.offset <= last_event_offset.unwrap_or(0) {
                     event_count = 0;
                     println!("CLIENT: Previous events for this server are now forgotten given an offset <= what we know");

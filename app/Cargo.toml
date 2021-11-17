@@ -9,6 +9,7 @@ version = "0.1.0"
 serde = { version = "1.0.126", default-features = false }
 
 [dev-dependencies]
+chrono = "0.4.19"
 circular-queue = "0.2.6"
 postcard = "0.7.0"
 rand = "0.8.4"
