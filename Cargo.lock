@@ -116,7 +116,6 @@ dependencies = [
 name = "flip-flop-app"
 version = "0.1.0"
 dependencies = [
- "bytes",
  "postcard",
  "serde",
  "tokio",

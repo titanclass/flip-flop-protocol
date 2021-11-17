@@ -1,6 +1,5 @@
 use std::{env, error::Error, net::SocketAddr, sync::Arc};
 
-use bytes::BytesMut;
 use flip_flop_app::{Command, Event};
 use tokio::net::UdpSocket;
 
@@ -27,13 +26,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let r = Arc::new(socket);
     let s = r.clone();
 
+    // This size should never exceed what can be sent in one packet. If you
+    // have needs that exceed this constraint then you will need to consider
+    // framing.
     const MAX_DATAGRAM_SIZE: usize = 32;
 
     tokio::spawn(async move {
         let mut send_buf = [0; MAX_DATAGRAM_SIZE];
         let command = Command {
             id: CommandId::SomeCommand,
-            data: b"data",
+            data: b"command-data",
             last_event_offset: None,
         };
         if let Ok(_) = postcard::to_slice(&command, &mut send_buf) {
@@ -44,12 +46,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("CLIENT: listening on {:?}", local_addr);
 
-    let mut recv_buf = BytesMut::with_capacity(MAX_DATAGRAM_SIZE);
+    let mut recv_buf = [0; MAX_DATAGRAM_SIZE];
 
     loop {
-        let (len, addr) = r.recv_from(&mut recv_buf).await?;
+        let (len, remote_addr) = r.recv_from(&mut recv_buf).await?;
         if let Ok(event) = postcard::from_bytes::<Event<EventId>>(&recv_buf[..len]) {
-            println!("CLIENT: {:?} event received from {:?}", event, addr);
+            println!("CLIENT: {:?} event received from {:?}", event, remote_addr);
         }
     }
 }
