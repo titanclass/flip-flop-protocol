@@ -2,15 +2,13 @@
 
 *A client/multi-server event-bus protocol suitable for half-duplex communications.*
 
-Flip-flop is an OSI-style application layer protocol optimised for half-duplex communication where a single client may command one of a number of servers. The server matching the address of a command will respond with an event.
+Flip-flop is an OSI-style application layer protocol optimised for half-duplex communication where a single client may command one of a number of servers. The server matching the address of a command is then expected to respond with an event. Communication is expected to be "best-effort" and the lower levels control the level of guarantees in terms of delivvery.
 
-Commands instruct a server to do something, normally resulting in an event. All commands convey an offset to the last event that the client received. Commands are user-definable and have an id.
+Commands instruct a server to do something, normally resulting in an event. All commands convey an offset to the last event that the client received so that a server knows the next event it should reply with. Commands have a user-definable id.
 
-A server maintains a history of events which may or may not be in relation to the processing of a command received. Events are designated with an offset. Events also convey a time delta relative to the time at being served to diminish the effects of clock drift. A client may then normalise an event's time with its own clock.
+A server maintains a history of events which may or may not be in relation to the processing of a command received. Events are designated with an offset. Events also convey a time delta relative to the time at being served to diminish the effects of clock drift betweeen a client and server. A client may then normalise an event's time with its own clock.
 
-A server always replies to a command with the next "nearest" event. The "nearest" event from a command's last offset is one that ascends in its magnitude. 
-
-A special command with an id of "0" is known as the "Event" command and causes a server to respond with its nearest event. All server implementations must support the "Event" command.
+A server replies to a command with the next "nearest" event. The "nearest" event is where its offset is greater than the command's last offset.
 
 Offsets are held as an unsigned 32 bit integer and may overflow to zero. In the situation of having overflowed, a client must forget all prior events and a server must ensure that any important events are re-sent.
 
