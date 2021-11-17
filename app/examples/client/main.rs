@@ -38,8 +38,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             data: b"command-data",
             last_event_offset: None,
         };
-        if let Ok(_) = postcard::to_slice(&command, &mut send_buf) {
-            let _ = s.send_to(&send_buf, remote_addr).await;
+        if let Ok(encoded_buf) = postcard::to_slice(&command, &mut send_buf) {
+            let _ = s.send_to(encoded_buf, remote_addr).await;
             println!("CLIENT: {:?} command sent to {:?}", command, remote_addr);
         }
     });

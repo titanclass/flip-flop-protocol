@@ -40,8 +40,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 time_delta: 1,
                 data: b"event-data",
             };
-            if let Ok(_) = postcard::to_slice(&event, &mut send_buf) {
-                let _ = socket.send_to(&send_buf, remote_addr).await;
+            if let Ok(encoded_buf) = postcard::to_slice(&event, &mut send_buf) {
+                let _ = socket.send_to(encoded_buf, remote_addr).await;
                 println!("SERVER: {:?} event replied to {:?}", event, remote_addr);
             }
         }
