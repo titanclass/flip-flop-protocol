@@ -1,6 +1,6 @@
 # flip-flop-protocol
 
-*A client/multi-server event-bus protocol suitable for half-duplex communications.*
+*A single-client/multi-server event-bus protocol suitable for half-duplex communications.*
 
 Flip-flop is an OSI-style application layer protocol optimised for half-duplex communication where a single client may command one of a number of servers. The server matching the address of a command is then expected to respond with an event. Communication is expected to be "best-effort" and the lower levels control the level of guarantees in terms of delivvery.
 
@@ -10,13 +10,14 @@ A server maintains a history of events which may or may not be in relation to th
 
 A server replies to a command with the next "nearest" event. The "nearest" event is where its offset is greater than the command's last offset.
 
-Offsets are held as an unsigned 32 bit integer and may overflow to zero. In the situation of having overflowed, a client must forget all prior events and a server must ensure that any important events are re-sent.
+Offsets are held as an unsigned 32 bit integer and may overflow to zero. In the situation of having overflowed, a client must forget all prior events and a server must ensure that any important events are re-sent. A client may detect this
+situation by checking whether the received offset is less than or equal to the one it has.
 
 A simplified link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address, a server port, an opaque variable length payload, and a CRC for error checking.
 
 ## Why flip-flop?
 
-Reason #1: data flow between a client and server "flip flops" i.e. can be only ever in one of two states of flow.
+Reason #1: data flow between a client and server "flip flops" i.e. the protocol is designed to be only be in one of two states of flow where either the client is sending and servers are receiving, or a server is sending and a client is receiving.
 
 Reason #2: We thought it was catchy.
 
