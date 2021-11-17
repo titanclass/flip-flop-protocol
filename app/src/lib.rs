@@ -84,7 +84,7 @@ mod tests {
         let mut buf = [0; 32];
         assert_eq!(
             postcard::to_slice(&command, &mut buf).unwrap(),
-            [0, 1, 0, 0, 0, 10, 0, 0, 0, 1, 13]
+            [0, 1, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 1, 13]
         );
         assert_eq!(
             postcard::from_bytes::<Event<EventId>>(&buf).unwrap(),
