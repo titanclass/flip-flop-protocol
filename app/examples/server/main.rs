@@ -31,10 +31,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     tokio::spawn(async move {
         loop {
+            let event_time = Instant::now();
             let delay = { Duration::from_secs(rand::thread_rng().gen_range(0..3)) };
-            if let Some(instant) = Instant::now().checked_add(delay) {
+            if let Some(instant) = event_time.checked_add(delay) {
                 time::sleep_until(instant).await;
-                let _ = event_s.send(instant).await;
+                let _ = event_s.send(event_time).await;
             }
         }
     });
@@ -68,7 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             .iter()
                             .take_while(|e| e.offset > last_event_offset)
                             .last()
-                            .or(events.iter().last()),
+                            .or_else(|| events.iter().last()),
                         None => events.iter().last(),
                     };
 
@@ -101,6 +102,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 // For this example, we will reset the event offset periodically
                 // so that a client can demonstrate how it forgets state.
                 if rand::thread_rng().gen_range(0..10) == 0 {
+                    println!("SERVER: Resetting events");
+                    events.clear();
                     event_offset = 0;
                 } else {
                     event_offset += 1;
