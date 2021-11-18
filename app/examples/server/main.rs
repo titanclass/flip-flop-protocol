@@ -78,14 +78,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // always have a timeout strategy in place and move on in the case
                     // where no event is replied in relation to a command.
                     // If we do have an event then we reply it to the client.
-                    if let Some(reply) = maybe_reply {
-                        let mut send_buf = [0; MAX_DATAGRAM_SIZE];
-                        if let Ok(encoded_buf) = postcard::to_slice(&reply, &mut send_buf) {
-                            let _ = socket.send_to(encoded_buf, remote_addr).await;
-                            println!("SERVER: {:?} event replied to {:?}", reply, remote_addr);
-                        }
-                    } else {
-                        println!("SERVER: No event to reply to {:?}", remote_addr);
+                    let reply = maybe_reply.unwrap_or_else(|| {
+                        &EventReply {
+                        event: Event::NoMoreEvents,
+                        offset: 0,
+                        delta_ticks: 0
+                    }
+                    });
+                    let mut send_buf = [0; MAX_DATAGRAM_SIZE];
+                    if let Ok(encoded_buf) = postcard::to_slice(&reply, &mut send_buf) {
+                        let _ = socket.send_to(encoded_buf, remote_addr).await;
+                        println!("SERVER: {:?} event replied to {:?}", reply, remote_addr);
                     }
                 }
             }

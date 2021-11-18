@@ -42,6 +42,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut next_send_time = Instant::now();
 
+    let mut init_mode = true;
+
     loop {
         // Wake at a regular interval which is what we need to do
         // to cycle predictably through our servers when operating in
@@ -52,8 +54,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // of its state by communicating the last event offset we received
         // for it.
         let mut send_buf = [0; MAX_DATAGRAM_SIZE];
+        let command = if init_mode {
+            Command::NextEvent
+        } else {
+            Command::SomeCommand
+        };
         let request = CommandRequest {
-            command: Command::SomeCommand,
+            command,
             last_event_offset,
         };
         if let Ok(encoded_buf) = postcard::to_slice(&request, &mut send_buf) {
@@ -77,14 +84,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         local_time, reply, event_count, remote_addr
                     );
                 }
-                if reply.offset <= last_event_offset.unwrap_or(0) {
+                if let Event::NoMoreEvents = reply.event {
+                    init_mode = false;
+                } else if reply.offset <= last_event_offset.unwrap_or(0) {
+                    init_mode = true;
                     event_count = 0;
+                    last_event_offset = Some(reply.offset);
                     println!("CLIENT: Previous events for this server are now forgotten given an offset <= what we know");
                 } else {
                     event_count += 1;
+                    last_event_offset = Some(reply.offset);
                 }
-
-                last_event_offset = Some(reply.offset);
             }
         }
 
