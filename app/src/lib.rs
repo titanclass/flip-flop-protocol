@@ -3,13 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Mandatory commands define methods that must be provided to obtain
-/// all commands that are required by the specification.
-pub trait MandatoryCommands {
-    /// Returns the command to request the next nearest event
-    /// closest to the last_event_offset field of the [CommandRequest].
-    fn next_event() -> Self;
-}
+/// By implementing this trait you should implement the following
+/// commands:
+/// NextEvent - request the server for the next event in relation to our last offset.
+pub trait MandatoryCommands {}
 
 /// A Command may only be sent by a client, of which there is only one
 /// client on the bus. Command requests take a type that provides their
@@ -25,13 +22,10 @@ pub struct CommandRequest<C: MandatoryCommands> {
     pub last_event_offset: Option<u32>,
 }
 
-/// Mandatory events define methods that must be provided to obtain
-/// all events that are required by the specification.
-pub trait MandatoryEvents {
-    /// Returns the event to indicate that there are no more events
-    /// available.
-    fn no_events() -> Self;
-}
+/// By implementing this trait you should implement the following
+/// events:
+/// NoMoreEvents - indicate that there are no more events beyond the requested offset.
+pub trait MandatoryEvents {}
 
 /// An EventRequest may only be emitted by a server, of which there can be many, and
 /// only in relation to having received a [CommandRequest] from a client. Event requests
@@ -68,11 +62,7 @@ mod tests {
             SomeOtherCommand,
         }
 
-        impl MandatoryCommands for Command {
-            fn next_event() -> Self {
-                Command::NextEvent
-            }
-        }
+        impl MandatoryCommands for Command {}
 
         let request = CommandRequest {
             command: Command::SomeOtherCommand,
@@ -98,11 +88,7 @@ mod tests {
             SomeOtherEvent,
         }
 
-        impl MandatoryEvents for Event {
-            fn no_events() -> Self {
-                Event::NoMoreEvents
-            }
-        }
+        impl MandatoryEvents for Event {}
 
         let reply = EventReply {
             event: Event::SomeOtherEvent,

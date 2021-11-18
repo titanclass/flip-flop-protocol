@@ -7,11 +7,7 @@ pub enum Command {
     SomeCommand,
 }
 
-impl MandatoryCommands for Command {
-    fn next_event() -> Self {
-        Self::NextEvent
-    }
-}
+impl MandatoryCommands for Command {}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Event {
@@ -19,8 +15,4 @@ pub enum Event {
     SomeEvent,
 }
 
-impl MandatoryEvents for Event {
-    fn no_events() -> Self {
-        Self::NoMoreEvents
-    }
-}
+impl MandatoryEvents for Event {}
