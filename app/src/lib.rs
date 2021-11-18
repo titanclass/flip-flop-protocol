@@ -3,8 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// By implementing this trait you should implement the following
-/// commands:
+/// By implementing this trait you should implement the following commands:
 /// NextEvent - request the server for the next event in relation to our last offset.
 pub trait MandatoryCommands {}
 
@@ -22,8 +21,7 @@ pub struct CommandRequest<C: MandatoryCommands> {
     pub last_event_offset: Option<u32>,
 }
 
-/// By implementing this trait you should implement the following
-/// events:
+/// By implementing this trait you should implement the following events:
 /// NoMoreEvents - indicate that there are no more events beyond the requested offset.
 pub trait MandatoryEvents {}
 
