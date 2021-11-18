@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
-pub enum CommandId {
+pub enum Command {
     SomeCommand,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub enum EventId {
+pub enum Event {
     SomeEvent,
 }

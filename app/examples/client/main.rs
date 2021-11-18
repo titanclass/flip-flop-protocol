@@ -1,7 +1,7 @@
 use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
 
 use chrono::Local;
-use flip_flop_app::{Command, Event};
+use flip_flop_app::{CommandRequest, EventReply};
 use tokio::{
     net::UdpSocket,
     time::{self, Instant},
@@ -9,7 +9,7 @@ use tokio::{
 
 #[path = "../common/lib.rs"]
 mod common;
-use crate::common::{CommandId, EventId};
+use crate::common::{Command, Event};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -52,14 +52,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // of its state by communicating the last event offset we received
         // for it.
         let mut send_buf = [0; MAX_DATAGRAM_SIZE];
-        let command = Command {
-            id: CommandId::SomeCommand,
-            data: b"command-data",
+        let request = CommandRequest {
+            command: Command::SomeCommand,
             last_event_offset,
         };
-        if let Ok(encoded_buf) = postcard::to_slice(&command, &mut send_buf) {
+        if let Ok(encoded_buf) = postcard::to_slice(&request, &mut send_buf) {
             let _ = s.send_to(encoded_buf, remote_addr).await;
-            println!("CLIENT: {:?} command sent to {:?}", command, remote_addr);
+            println!("CLIENT: {:?} command sent to {:?}", request, remote_addr);
         }
 
         // Receive an event from the server. If we don't get anything within
@@ -68,24 +67,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         if let Ok(Ok((len, remote_addr))) =
             time::timeout(Duration::from_millis(100), r.recv_from(&mut recv_buf)).await
         {
-            if let Ok(event) = postcard::from_bytes::<Event<EventId>>(&recv_buf[..len]) {
+            if let Ok(reply) = postcard::from_bytes::<EventReply<Event>>(&recv_buf[..len]) {
                 if let Some(local_time) = Local::now().checked_sub_signed(
-                    chrono::Duration::from_std(Duration::from_secs(event.delta_ticks))
+                    chrono::Duration::from_std(Duration::from_secs(reply.delta_ticks))
                         .unwrap_or(chrono::Duration::seconds(0)),
                 ) {
                     println!(
                         "CLIENT: event time {:?} {:?} event {} received from {:?}",
-                        local_time, event, event_count, remote_addr
+                        local_time, reply, event_count, remote_addr
                     );
                 }
-                if event.offset <= last_event_offset.unwrap_or(0) {
+                if reply.offset <= last_event_offset.unwrap_or(0) {
                     event_count = 0;
                     println!("CLIENT: Previous events for this server are now forgotten given an offset <= what we know");
                 } else {
                     event_count += 1;
                 }
 
-                last_event_offset = Some(event.offset);
+                last_event_offset = Some(reply.offset);
             }
         }
 

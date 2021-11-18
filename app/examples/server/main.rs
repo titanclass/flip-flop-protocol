@@ -2,7 +2,7 @@ use circular_queue::CircularQueue;
 use rand::prelude::*;
 use std::{env, error::Error, net::SocketAddr, time::Duration};
 
-use flip_flop_app::{Command, Event};
+use flip_flop_app::{CommandRequest, EventReply};
 use tokio::{
     net::UdpSocket,
     sync::mpsc,
@@ -11,7 +11,7 @@ use tokio::{
 
 #[path = "../common/lib.rs"]
 mod common;
-use crate::common::{CommandId, EventId};
+use crate::common::{Command, Event};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -47,16 +47,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     const MAX_EVENTS: usize = 10;
 
     let mut recv_buf = [0; MAX_DATAGRAM_SIZE];
-    let mut events = CircularQueue::<Event<EventId>>::with_capacity(MAX_EVENTS);
+    let mut events = CircularQueue::<EventReply<Event>>::with_capacity(MAX_EVENTS);
     let mut event_offset = 0;
 
     loop {
         tokio::select! {
             Ok((len, remote_addr)) = socket.recv_from(&mut recv_buf) => {
-                if let Ok(command) = postcard::from_bytes::<Command<CommandId>>(&recv_buf[..len]) {
+                if let Ok(request) = postcard::from_bytes::<CommandRequest<Command>>(&recv_buf[..len]) {
                     println!(
                         "SERVER: {:?} command received from {:?}. Replying.",
-                        command, remote_addr
+                        request, remote_addr
                     );
 
                     // We optimise searching for events by going backward in our
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // offset exceeds the last one observed by the client. In the
                     // case where we have no last offset expressed by the client
                     // then we provide the oldest one we have.
-                    let maybe_event = match command.last_event_offset {
+                    let maybe_reply = match request.last_event_offset {
                         Some(last_event_offset) => events
                             .iter()
                             .take_while(|e| e.offset > last_event_offset)
@@ -78,11 +78,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // always have a timeout strategy in place and move on in the case
                     // where no event is replied in relation to a command.
                     // If we do have an event then we reply it to the client.
-                    if let Some(event) = maybe_event {
+                    if let Some(reply) = maybe_reply {
                         let mut send_buf = [0; MAX_DATAGRAM_SIZE];
-                        if let Ok(encoded_buf) = postcard::to_slice(&event, &mut send_buf) {
+                        if let Ok(encoded_buf) = postcard::to_slice(&reply, &mut send_buf) {
                             let _ = socket.send_to(encoded_buf, remote_addr).await;
-                            println!("SERVER: {:?} event replied to {:?}", event, remote_addr);
+                            println!("SERVER: {:?} event replied to {:?}", reply, remote_addr);
                         }
                     } else {
                         println!("SERVER: No event to reply to {:?}", remote_addr);
@@ -91,13 +91,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             Some(event_instant) = event_r.recv() => {
-                let event = Event {
-                    id: EventId::SomeEvent,
+                let reply = EventReply {
+                    event: Event::SomeEvent,
                     offset: event_offset,
                     delta_ticks: Instant::now().duration_since(event_instant).as_secs(),
-                    data: b"event-data",
                 };
-                events.push(event);
+                events.push(reply);
 
                 // For this example, we will reset the event offset periodically
                 // so that a client can demonstrate how it forgets state.

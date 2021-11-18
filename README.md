@@ -4,9 +4,9 @@
 
 Flip-flop is an OSI-style application layer protocol optimised for half-duplex communication where a single client may command one of a number of servers. The server matching the address of a command is then expected to respond with an event. Communication is expected to be "best-effort" and the lower levels control the level of guarantees in terms of delivvery.
 
-Commands instruct a server to do something, normally resulting in an event. All commands convey an offset to the last event that the client received so that a server knows the next event it should reply with. Commands have a user-definable id.
+Commands instruct a server to do something, normally resulting in an event. All commands convey an offset to the last event that the client received so that a server knows the next event it should reply with. Commands are use-definable.
 
-A server maintains a history of events which may or may not be in relation to the processing of a command received. Events are designated with an offset. Events also convey a time delta relative to the time at being served to diminish the effects of clock drift betweeen a client and server. A client may then normalise an event's time with its own clock.
+A server maintains a history of events which may or may not be in relation to the processing of a command received. Events are designated with an offset and are user-definable. Events also convey a time delta relative to the time at being served to diminish the effects of clock drift betweeen a client and server. A client may then normalise an event's time with its own clock.
 
 A server replies to a command with the next "nearest" event. The "nearest" event is where its offset is greater than the command's last offset.
 
