@@ -113,6 +113,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc-any"
+version = "2.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "073375684a58dece169afbdc9879a027f3698118ad3814938316c6002b7aa921"
+
+[[package]]
 name = "critical-section"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -144,6 +150,15 @@ dependencies = [
  "rand",
  "serde",
  "tokio",
+]
+
+[[package]]
+name = "flip-flop-data"
+version = "0.1.0"
+dependencies = [
+ "crc-any",
+ "postcard",
+ "serde",
 ]
 
 [[package]]

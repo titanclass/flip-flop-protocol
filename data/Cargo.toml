@@ -1,0 +1,13 @@
+[package]
+authors = ["huntc <huntchr@gmail.com>"]
+edition = "2021"
+readme = "README.md"
+name = "flip-flop-data"
+version = "0.1.0"
+
+[dependencies]
+crc-any = { version = "2.4.1", default-features = false }
+serde = { version = "1.0.126", default-features = false }
+
+[dev-dependencies]
+postcard = "0.7.0"
