@@ -127,15 +127,16 @@ mod tests {
             frame_counter: 1,
         };
 
-        let mut nonce = [0; 8];
-        let _ = postcard::to_slice(&header, &mut nonce).unwrap();
-        let nonce = GenericArray::from_slice(&nonce);
+        let nonce = GenericArray::from_slice(&[0; 8]); // Should be some random value exchanged and concatenated with the frame counter, not zero!
+
+        let mut associated_data = [0; 6];
+        let _ = postcard::to_slice(&header, &mut associated_data).unwrap();
 
         let payload = b"some data";
         let mut encrypted_payload: Vec<u8, 128> = Vec::new();
         let _ = encrypted_payload.extend_from_slice(payload).unwrap();
         let _ = cipher
-            .encrypt_in_place(nonce, b"", &mut encrypted_payload)
+            .encrypt_in_place(nonce, &associated_data, &mut encrypted_payload)
             .unwrap();
 
         let expected_frame = DataFrame::new(&header, &encrypted_payload);
@@ -144,7 +145,7 @@ mod tests {
             DataFrame {
                 //                        FEDCBA_98_76543_2_10
                 header: 0b000000000000001_000000_10_11111_1_00,
-                encrypted_payload: &[91, 146, 159, 160, 124, 31, 21, 57, 196, 230, 143, 129, 18],
+                encrypted_payload: &[112, 28, 128, 64, 171, 5, 37, 219, 171, 39, 144, 217, 94],
             }
         );
     }
@@ -159,7 +160,7 @@ mod tests {
         let data_frame = DataFrame {
             //                        FEDCBA_98_76543_2_10
             header: 0b000000000000001_000000_10_11111_1_00,
-            encrypted_payload: &[91, 146, 159, 160, 124, 31, 21, 57, 196, 230, 143, 129, 18],
+            encrypted_payload: &[112, 28, 128, 64, 171, 5, 37, 219, 171, 39, 144, 217, 94],
         };
 
         let (header, encrypted_payload) = data_frame.parse().unwrap();
@@ -174,16 +175,17 @@ mod tests {
 
         assert_eq!(header, expected_header);
 
-        let mut nonce = [0; 8];
-        let _ = postcard::to_slice(&header, &mut nonce).unwrap();
-        let nonce = GenericArray::from_slice(&nonce);
+        let nonce = GenericArray::from_slice(&[0; 8]); // Should be some random value exchanged and concatenated with the frame counter, not zero!
+
+        let mut associated_data = [0; 6];
+        let _ = postcard::to_slice(&header, &mut associated_data).unwrap();
 
         let mut decrypted_payload: Vec<u8, 128> = Vec::new();
         let _ = decrypted_payload
             .extend_from_slice(encrypted_payload)
             .unwrap();
         let _ = cipher
-            .decrypt_in_place(nonce, b"", &mut decrypted_payload)
+            .decrypt_in_place(nonce, &associated_data, &mut decrypted_payload)
             .unwrap();
 
         let expected_payload = b"some data";
