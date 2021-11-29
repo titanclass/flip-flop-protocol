@@ -45,12 +45,12 @@ pub struct DataFrame<'a> {
     // 8..=9   server port
     // 10..=15 frame counter
     header: u32,
-    // Payload data appended with a Message Integrity Check (MIC).
+    // Payload data appended with a Message Authentication Code (MAC).
     encrypted_payload: &'a [u8],
 }
 
 impl<'a> DataFrame<'a> {
-    /// Create a new dataframe with an encrypted payload inclusive of its MIC which
+    /// Create a new dataframe with an encrypted payload inclusive of its MAC which
     /// is expected to be appended at the end.
     pub fn new(header: &'a Header, encrypted_payload: &'a [u8]) -> Self {
         let source = if header.source == DataSource::Client {
@@ -70,7 +70,7 @@ impl<'a> DataFrame<'a> {
     /// Parse the contents of the data frame.
     /// If the data frame version is an incompatible value
     /// then an error is returned. Otherwise, the header
-    /// and encrypted payload (including a MIC at the end)
+    /// and encrypted payload (including a MAC at the end)
     /// are returned.
     pub fn parse(&self) -> Result<(Header, &'a [u8]), ParseError> {
         let version = self.header & 0x02;
