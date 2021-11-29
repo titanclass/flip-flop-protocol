@@ -30,8 +30,8 @@ pub struct Header {
     /// A frame counter for ensuring message authenticity by
     /// being able to vary a nonce. Should be incremented by
     /// the message source and is expected to overflow to zero
-    /// after 0x3F (5 bits).
-    pub frame_counter: u32,
+    /// after 0xFFFF (16 bits).
+    pub frame_counter: u16,
 }
 
 /// A data frame encapsulates client and server packets
@@ -43,7 +43,8 @@ pub struct DataFrame<'a> {
     // 2..=2   source 0 = client, 1 = server
     // 3..=7   server address
     // 8..=9   server port
-    // 10..=15 frame counter
+    // 10..=15 reserved - must be zero
+    // 16..=31 frame counter
     header: u32,
     // Payload data appended with a Message Authentication Code (MAC).
     encrypted_payload: &'a [u8],
@@ -62,7 +63,7 @@ impl<'a> DataFrame<'a> {
             header: (source << 2)
                 | (((header.server_address as u32) & 0x1F) << 3)
                 | (((header.server_port as u32) & 0x03) << 8)
-                | (((header.frame_counter as u32) & 0x3F) << 10),
+                | (((header.frame_counter as u32) & 0xFFFF) << 16),
             encrypted_payload,
         }
     }
@@ -79,9 +80,9 @@ impl<'a> DataFrame<'a> {
             1 => Some(DataSource::Server),
             _ => None,
         };
-        let server_address = (self.header >> 3) & 0x1f;
+        let server_address = (self.header >> 3) & 0x1F;
         let server_port = (self.header >> 8) & 0x03;
-        let frame_counter = (self.header >> 10) & 0x3f;
+        let frame_counter = (self.header >> 16) & 0xFFFF;
 
         match (version, source) {
             (0, Some(source)) => Ok((
@@ -90,7 +91,7 @@ impl<'a> DataFrame<'a> {
                     source,
                     server_address: server_address as _,
                     server_port: server_port as _,
-                    frame_counter,
+                    frame_counter: frame_counter as _,
                 },
                 self.encrypted_payload,
             )),
@@ -141,8 +142,8 @@ mod tests {
         assert_eq!(
             expected_frame,
             DataFrame {
-                //        FEDCBA_98_76543_2_10
-                header: 0b000001_10_11111_1_00,
+                //                        FEDCBA_98_76543_2_10
+                header: 0b000000000000001_000000_10_11111_1_00,
                 encrypted_payload: &[91, 146, 159, 160, 124, 31, 21, 57, 196, 230, 143, 129, 18],
             }
         );
@@ -156,8 +157,8 @@ mod tests {
         let cipher = AesCcm::new(key);
 
         let data_frame = DataFrame {
-            //        FEDCBA_98_76543_2_10
-            header: 0b000001_10_11111_1_00,
+            //                        FEDCBA_98_76543_2_10
+            header: 0b000000000000001_000000_10_11111_1_00,
             encrypted_payload: &[91, 146, 159, 160, 124, 31, 21, 57, 196, 230, 143, 129, 18],
         };
 
