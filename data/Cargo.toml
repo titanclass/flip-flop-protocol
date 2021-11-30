@@ -1,0 +1,16 @@
+[package]
+authors = ["huntc <huntchr@gmail.com>"]
+edition = "2021"
+readme = "README.md"
+name = "flip-flop-data"
+version = "0.1.0"
+
+[dependencies]
+serde = { version = "1.0.126", default-features = false }
+
+[dev-dependencies]
+aes = { version = "0.7", features = ["force-soft"] }
+aead = { version = "0.4", features = ["dev"], default-features = false }
+ccm = { version = "0.4", default-features = false, features = ["heapless"] }
+heapless = "0.7"
+postcard = "0.7"
