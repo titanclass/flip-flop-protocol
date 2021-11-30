@@ -25,7 +25,7 @@ pub struct Header {
     pub source: DataSource,
     /// The address of the server 0..31.
     pub server_address: u8,
-    /// The port of the server 0..3.
+    /// The port of the server 0..31.
     pub server_port: u8,
     /// A frame counter for ensuring message authenticity by
     /// being able to vary a nonce. Should be incremented by
@@ -42,8 +42,8 @@ pub struct DataFrame<'a> {
     // 0..=1   protocol version
     // 2..=2   source 0 = client, 1 = server
     // 3..=7   server address
-    // 8..=9   server port
-    // 10..=15 reserved - must be zero
+    // 8..=12  server port
+    // 13..=15 reserved - must be zero
     // 16..=31 frame counter
     header: u32,
     // Payload data appended with a Message Authentication Code (MAC).
@@ -62,7 +62,7 @@ impl<'a> DataFrame<'a> {
         Self {
             header: (source << 2)
                 | (((header.server_address as u32) & 0x1F) << 3)
-                | (((header.server_port as u32) & 0x03) << 8)
+                | (((header.server_port as u32) & 0x1F) << 8)
                 | (((header.frame_counter as u32) & 0xFFFF) << 16),
             encrypted_payload,
         }
@@ -81,7 +81,7 @@ impl<'a> DataFrame<'a> {
             _ => None,
         };
         let server_address = (self.header >> 3) & 0x1F;
-        let server_port = (self.header >> 8) & 0x03;
+        let server_port = (self.header >> 8) & 0x1F;
         let frame_counter = (self.header >> 16) & 0xFFFF;
 
         match (version, source) {
