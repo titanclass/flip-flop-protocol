@@ -74,10 +74,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     };
 
                     // It is quite plausible that we have no events. In this case we
-                    // will not send anything back to the client. The client should
-                    // always have a timeout strategy in place and move on in the case
-                    // where no event is replied in relation to a command.
-                    // If we do have an event then we reply it to the client.
+                    // reply with a "no more events" enum, an offset of 0 and a delta
+                    // ticks of 0.
                     let reply = maybe_reply.unwrap_or_else(|| {
                         &EventReply {
                         event: Event::NoMoreEvents,

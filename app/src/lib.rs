@@ -41,6 +41,8 @@ pub struct EventReply<E: MandatoryEvents> {
     /// A sequence number to identify an event. Offsets are expected to increment
     /// by one each time. Therefore, it is possible for a client to determine if
     /// there is an event missing and possibly re-request it.
+    /// In the case of a `NoMoreEvents` event, this value should be 0 and remain
+    /// uninterpreted by the client.
     pub offset: u32,
     /// The age of this event in relation to the server's notion of current time,
     /// expressed in a manner agreed between a client and server e.g. ticks can
