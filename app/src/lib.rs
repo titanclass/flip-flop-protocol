@@ -3,9 +3,11 @@
 
 use serde::{Deserialize, Serialize};
 
-/// By implementing this trait you should implement the following commands:
-/// NextEvent - request the server for the next event in relation to our last offset.
-pub trait MandatoryCommands {}
+/// Required commands for the protocol.
+pub trait MandatoryCommands {
+    /// Returns a command to request the server for the next event in relation to our last offset.
+    fn next_event() -> Self;
+}
 
 /// A Command may only be sent by a client, of which there is only one
 /// client on the bus. Command requests take a type that provides their
@@ -21,9 +23,11 @@ pub struct CommandRequest<C: MandatoryCommands> {
     pub last_event_offset: Option<u32>,
 }
 
-/// By implementing this trait you should implement the following events:
-/// NoMoreEvents - indicate that there are no more events beyond the requested offset.
-pub trait MandatoryEvents {}
+/// Required events for the protocol.
+pub trait MandatoryEvents {
+    /// Returns an to indicate that there are no more events beyond the requested offset.
+    fn no_more_events() -> Self;
+}
 
 /// An EventRequest may only be emitted by a server, of which there can be many, and
 /// only in relation to having received a [CommandRequest] from a client. Event requests
@@ -62,7 +66,11 @@ mod tests {
             SomeOtherCommand,
         }
 
-        impl MandatoryCommands for Command {}
+        impl MandatoryCommands for Command {
+            fn next_event() -> Self {
+                Command::NextEvent
+            }
+        }
 
         let request = CommandRequest {
             command: Command::SomeOtherCommand,
@@ -88,7 +96,11 @@ mod tests {
             SomeOtherEvent,
         }
 
-        impl MandatoryEvents for Event {}
+        impl MandatoryEvents for Event {
+            fn no_more_events() -> Self {
+                Event::NoMoreEvents
+            }
+        }
 
         let reply = EventReply {
             event: Event::SomeOtherEvent,
