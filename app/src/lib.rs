@@ -54,6 +54,29 @@ pub struct EventReply<E: MandatoryEvents> {
     pub delta_ticks: u64,
 }
 
+/// Return an event reply containing an event.
+pub fn event_reply<E, T, DS>(maybe_event: Option<&(E, u32, T)>, duration_since: DS) -> EventReply<E>
+where
+    DS: FnOnce(T) -> u64,
+    E: Clone + MandatoryEvents,
+    T: Copy,
+{
+    // It is quite plausible that we have no events. In this case we
+    // reply with a "no more events" enum, an offset of 0 and a delta
+    // ticks of 0.
+    maybe_event
+        .map(|(e, o, t)| EventReply {
+            event: e.clone(),
+            offset: *o,
+            delta_ticks: duration_since(*t),
+        })
+        .unwrap_or_else(|| EventReply {
+            event: E::no_more_events(),
+            offset: 0,
+            delta_ticks: 0,
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_event_serialisation() {
-        #[derive(Debug, Deserialize, PartialEq, Serialize)]
+        #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
         enum Event {
             NoMoreEvents,
             SomeOtherEvent,
@@ -102,11 +125,7 @@ mod tests {
             }
         }
 
-        let reply = EventReply {
-            event: Event::SomeOtherEvent,
-            offset: 1,
-            delta_ticks: 10,
-        };
+        let reply = event_reply(Some(&(Event::SomeOtherEvent, 1, 0)), |_| 10);
 
         let mut buf = [0; 32];
         assert_eq!(

@@ -13,7 +13,7 @@ impl MandatoryCommands for Command {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Event {
     NoMoreEvents,
     SomeEvent,

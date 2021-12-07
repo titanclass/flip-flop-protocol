@@ -2,7 +2,7 @@ use circular_queue::CircularQueue;
 use rand::prelude::*;
 use std::{env, error::Error, net::SocketAddr, time::Duration};
 
-use flip_flop_app::{CommandRequest, EventReply};
+use flip_flop_app::CommandRequest;
 use tokio::{
     net::UdpSocket,
     sync::mpsc,
@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     const MAX_EVENTS: usize = 10;
 
     let mut recv_buf = [0; MAX_DATAGRAM_SIZE];
-    let mut events = CircularQueue::<EventReply<Event>>::with_capacity(MAX_EVENTS);
+    let mut events = CircularQueue::<(Event, u32, Instant)>::with_capacity(MAX_EVENTS);
     let mut event_offset = 0;
 
     loop {
@@ -67,22 +67,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let maybe_reply = match request.last_event_offset {
                         Some(last_event_offset) => events
                             .iter()
-                            .take_while(|e| e.offset > last_event_offset)
+                            .take_while(|(_, offset, _)| *offset > last_event_offset)
                             .last()
                             .or_else(|| events.iter().last()),
                         None => events.iter().last(),
                     };
 
-                    // It is quite plausible that we have no events. In this case we
-                    // reply with a "no more events" enum, an offset of 0 and a delta
-                    // ticks of 0.
-                    let reply = maybe_reply.unwrap_or_else(|| {
-                        &EventReply {
-                        event: Event::NoMoreEvents,
-                        offset: 0,
-                        delta_ticks: 0
-                    }
-                    });
+                    let reply = flip_flop_app::event_reply(maybe_reply, |t|Instant::now().duration_since(t).as_secs());
+
                     let mut send_buf = [0; MAX_DATAGRAM_SIZE];
                     if let Ok(encoded_buf) = postcard::to_slice(&reply, &mut send_buf) {
                         let _ = socket.send_to(encoded_buf, remote_addr).await;
@@ -92,12 +84,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             Some(event_instant) = event_r.recv() => {
-                let reply = EventReply {
-                    event: Event::SomeEvent,
-                    offset: event_offset,
-                    delta_ticks: Instant::now().duration_since(event_instant).as_secs(),
-                };
-                events.push(reply);
+                events.push((Event::SomeEvent, event_offset, event_instant));
 
                 // For this example, we will reset the event offset periodically
                 // so that a client can demonstrate how it forgets state.
