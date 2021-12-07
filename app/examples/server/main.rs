@@ -68,8 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         Some(last_event_offset) => events
                             .iter()
                             .take_while(|(_, offset, _)| *offset > last_event_offset)
-                            .last()
-                            .or_else(|| events.iter().last()),
+                            .last(),
                         None => events.iter().last(),
                     };
 
