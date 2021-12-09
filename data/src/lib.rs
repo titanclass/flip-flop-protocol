@@ -46,7 +46,8 @@ pub struct DataFrame<'a> {
     // 13..=15 reserved - must be zero
     // 16..=31 frame counter
     header: u32,
-    // Payload data appended with a Message Authentication Code (MAC).
+    // Payload data appended with a Message Authentication Code (MAC) using AES-128 CCM.
+    // This will be required to have a one byte length as the first byte.
     encrypted_payload: &'a [u8],
 }
 
