@@ -51,6 +51,10 @@ pub struct DataFrame<'a> {
     encrypted_payload: &'a [u8],
 }
 
+/// The size of a data frame header including the byte length for the payload.
+/// The byte length value is not to exceed 127.
+pub const HEADER_SIZE: usize = 5;
+
 impl<'a> DataFrame<'a> {
     /// Create a new dataframe with an encrypted payload inclusive of its MAC which
     /// is expected to be appended at the end.
