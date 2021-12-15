@@ -1,32 +1,33 @@
 #![cfg_attr(not(test), no_std)]
 #![doc = include_str!("../../README.md")]
 
-use serde::{Deserialize, Serialize};
-
-/// Required commands for the protocol.
-pub trait MandatoryCommands {
-    /// Returns a command to request the server for the next event in relation to our last offset.
-    fn next_event() -> Self;
-}
+use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize, Serializer};
 
 /// A Command may only be sent by a client, of which there is only one
 /// client on the bus. Command requests take a type that provides their
 /// command; usually an enum. Command requests convey the last [EventReply]
-/// offset that the client has processed for the associated server. The
-/// addressing of servers is left to a lower layer e.g. UDP, or a serial-based
-/// transport.
+/// offset that the client has processed for the associated server, starting at
+/// 0 as the default.
+/// Note that the addressing of servers is left to a lower layer e.g. UDP, or a
+/// serial-based transport.
+///
+/// A CommandRequest has the following little endian byte layout:
+///
+/// | 0 | 1 | 2 | 3 |    ..   |
+/// +---+---+---+---+---------+
+/// |     offset    | command |
+///
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
-pub struct CommandRequest<C: MandatoryCommands> {
-    /// The command to issue.
-    pub command: C,
+pub struct CommandRequest<C: DeserializeOwned + Serialize> {
     /// The last offset of the server recorded by the client.
-    pub last_event_offset: Option<u32>,
-}
-
-/// Required events for the protocol.
-pub trait MandatoryEvents {
-    /// Returns an to indicate that there are no more events beyond the requested offset.
-    fn no_more_events() -> Self;
+    pub last_event_offset: u32,
+    /// The command to issue, or None if we wish to just get the next event
+    /// available.
+    #[serde(
+        deserialize_with = "deserialise_last_field",
+        serialize_with = "serialise_last_field"
+    )]
+    pub command: Option<C>,
 }
 
 /// An EventRequest may only be emitted by a server, of which there can be many, and
@@ -38,27 +39,35 @@ pub trait MandatoryEvents {
 /// an offset less than or equal to the one it requested. An event request also conveys a
 /// delta in time in a form that the client and its servers understand, and relative to
 /// the server's current notion of time.
+///
+/// An EventReply has the following little endian byte layout:
+///
+/// | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |  ..   |
+/// +---+---+---+---+---+---+---+---+-------+
+/// |          delta_ticks          | event |
+///
+
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
-pub struct EventReply<E: MandatoryEvents> {
-    /// The event to reply.
-    pub event: E,
-    /// A sequence number to identify an event. Offsets are expected to increment
-    /// by one each time. Therefore, it is possible for a client to determine if
-    /// there is an event missing and possibly re-request it.
-    /// In the case of a `NoMoreEvents` event, this value should be 0 and remain
-    /// uninterpreted by the client.
-    pub offset: u32,
+pub struct EventReply<E: DeserializeOwned + Serialize> {
     /// The age of this event in relation to the server's notion of current time,
     /// expressed in a manner agreed between a client and server e.g. ticks can
     /// represent seconds.
     pub delta_ticks: u64,
+    /// The event to reply along with its offset. Offsets are expected to increment
+    /// by one each time. Therefore, it is possible for a client to determine if
+    /// there is an event missing and possibly re-request it.
+    #[serde(
+        deserialize_with = "deserialise_last_field",
+        serialize_with = "serialise_last_field"
+    )]
+    pub event: Option<(E, u32)>,
 }
 
-/// Return an event reply containing an event.
+/// Given an event, offset and time, return an event reply containing it.
 pub fn event_reply<E, T, DS>(maybe_event: Option<&(E, u32, T)>, duration_since: DS) -> EventReply<E>
 where
     DS: FnOnce(T) -> u64,
-    E: Clone + MandatoryEvents,
+    E: Clone + DeserializeOwned + Serialize,
     T: Copy,
 {
     // It is quite plausible that we have no events. In this case we
@@ -66,15 +75,33 @@ where
     // ticks of 0.
     maybe_event
         .map(|(e, o, t)| EventReply {
-            event: e.clone(),
-            offset: *o,
             delta_ticks: duration_since(*t),
+            event: Some((e.clone(), *o)),
         })
         .unwrap_or_else(|| EventReply {
-            event: E::no_more_events(),
-            offset: 0,
             delta_ticks: 0,
+            event: None,
         })
+}
+
+fn deserialise_last_field<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(d).map_or_else(|_| Ok(None), |v| Ok(Some(v)))
+}
+
+fn serialise_last_field<S, T>(o: &Option<T>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize,
+{
+    if let Some(o) = o {
+        o.serialize(s)
+    } else {
+        s.serialize_unit()
+    }
 }
 
 #[cfg(test)]
@@ -82,31 +109,52 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_command_serialisation() {
+    fn test_command_serialisation_with_a_command() {
         #[derive(Debug, Deserialize, PartialEq, Serialize)]
         enum Command {
-            NextEvent,
+            SomeCommand,
             SomeOtherCommand,
-        }
-
-        impl MandatoryCommands for Command {
-            fn next_event() -> Self {
-                Command::NextEvent
-            }
+            AndAnotherCommand,
         }
 
         let request = CommandRequest {
-            command: Command::SomeOtherCommand,
-            last_event_offset: None,
+            last_event_offset: 9,
+            command: Some(Command::AndAnotherCommand),
         };
 
         let mut buf = [0; 32];
-        assert_eq!(postcard::to_slice(&request, &mut buf).unwrap(), [1, 0]);
+        let serialised = postcard::to_slice(&request, &mut buf).unwrap();
+        assert_eq!(serialised, [9, 0, 0, 0, 2]);
         assert_eq!(
-            postcard::from_bytes::<CommandRequest<Command>>(&buf).unwrap(),
+            postcard::from_bytes::<CommandRequest<Command>>(serialised).unwrap(),
             CommandRequest {
-                command: Command::SomeOtherCommand,
-                last_event_offset: None,
+                last_event_offset: 9,
+                command: Some(Command::AndAnotherCommand),
+            }
+        );
+    }
+
+    #[test]
+    fn test_command_serialisation_with_no_command() {
+        #[derive(Debug, Deserialize, PartialEq, Serialize)]
+        enum Command {
+            SomeCommand,
+            SomeOtherCommand,
+        }
+
+        let request = CommandRequest::<Command> {
+            last_event_offset: 0,
+            command: None,
+        };
+
+        let mut buf = [0; 32];
+        let serialised = postcard::to_slice(&request, &mut buf).unwrap();
+        assert_eq!(serialised, [0, 0, 0, 0]);
+        assert_eq!(
+            postcard::from_bytes::<CommandRequest<Command>>(serialised).unwrap(),
+            CommandRequest {
+                last_event_offset: 0,
+                command: None,
             }
         );
     }
@@ -115,29 +163,42 @@ mod tests {
     fn test_event_serialisation() {
         #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
         enum Event {
-            NoMoreEvents,
+            SomeEvent,
             SomeOtherEvent,
         }
 
-        impl MandatoryEvents for Event {
-            fn no_more_events() -> Self {
-                Event::NoMoreEvents
-            }
-        }
-
-        let reply = event_reply(Some(&(Event::SomeOtherEvent, 1, 0)), |_| 10);
+        let reply = event_reply(Some(&(Event::SomeOtherEvent, 9, 0)), |_| 10);
 
         let mut buf = [0; 32];
+        let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
+        assert_eq!(serialised, [10, 0, 0, 0, 0, 0, 0, 0, 1, 9, 0, 0, 0]);
         assert_eq!(
-            postcard::to_slice(&reply, &mut buf).unwrap(),
-            [1, 1, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0]
-        );
-        assert_eq!(
-            postcard::from_bytes::<EventReply<Event>>(&buf).unwrap(),
+            postcard::from_bytes::<EventReply<Event>>(serialised).unwrap(),
             EventReply {
-                event: Event::SomeOtherEvent,
-                offset: 1,
                 delta_ticks: 10,
+                event: Some((Event::SomeOtherEvent, 9)),
+            }
+        );
+    }
+
+    #[test]
+    fn test_event_serialisation_with_no_more_events() {
+        #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+        enum Event {
+            SomeEvent,
+            SomeOtherEvent,
+        }
+
+        let reply = event_reply::<Event, u32, _>(None, |_| 10);
+
+        let mut buf = [0; 32];
+        let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
+        assert_eq!(serialised, [0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            postcard::from_bytes::<EventReply<Event>>(serialised).unwrap(),
+            EventReply {
+                delta_ticks: 0,
+                event: None,
             }
         );
     }

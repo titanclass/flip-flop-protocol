@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // framing.
     const MAX_DATAGRAM_SIZE: usize = 32;
 
-    let mut last_event_offset = None;
+    let mut last_event_offset = 0;
     let mut event_count = 0;
 
     println!("CLIENT: listening on {:?}", local_addr);
@@ -55,13 +55,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // for it.
         let mut send_buf = [0; MAX_DATAGRAM_SIZE];
         let command = if init_mode {
-            Command::NextEvent
+            None
         } else {
-            Command::SomeCommand
+            Some(Command::SomeCommand)
         };
         let request = CommandRequest {
-            command,
             last_event_offset,
+            command,
         };
         if let Ok(encoded_buf) = postcard::to_slice(&request, &mut send_buf) {
             let _ = s.send_to(encoded_buf, remote_addr).await;
@@ -84,16 +84,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         local_time, reply, event_count, remote_addr
                     );
                 }
-                if let Event::NoMoreEvents = reply.event {
-                    init_mode = false;
-                } else if reply.offset <= last_event_offset.unwrap_or(0) {
-                    init_mode = true;
-                    event_count = 0;
-                    last_event_offset = Some(reply.offset);
-                    println!("CLIENT: Previous events for this server are now forgotten given an offset <= what we know");
-                } else {
-                    event_count += 1;
-                    last_event_offset = Some(reply.offset);
+                match reply.event {
+                    None => init_mode = false,
+                    Some((_, offset)) if offset <= last_event_offset => {
+                        init_mode = true;
+                        event_count = 0;
+                        last_event_offset = offset;
+                        println!("CLIENT: Previous events for this server are now forgotten given an offset <= what we know");
+                    }
+                    Some((_, offset)) => {
+                        event_count += 1;
+                        last_event_offset = offset;
+                    }
                 }
             }
         }

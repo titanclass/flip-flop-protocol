@@ -64,13 +64,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // offset exceeds the last one observed by the client. In the
                     // case where we have no last offset expressed by the client
                     // then we provide the oldest one we have.
-                    let maybe_reply = match request.last_event_offset {
-                        Some(last_event_offset) => events
+                    let maybe_reply = events
                             .iter()
-                            .take_while(|(_, offset, _)| *offset > last_event_offset)
-                            .last(),
-                        None => events.iter().last(),
-                    };
+                            .take_while(|(_, offset, _)| *offset > request.last_event_offset)
+                            .last().or_else(|| events.iter().next());
 
                     let reply = flip_flop_app::event_reply(maybe_reply, |t|Instant::now().duration_since(t).as_secs());
 
