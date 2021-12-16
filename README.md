@@ -6,7 +6,7 @@ Flip-flop is an OSI-style application layer protocol optimised for half-duplex c
 
 Commands instruct a server to do something, normally resulting in an event. All commands convey an offset to the last event that the client received so that a server knows the next event it should reply with. Commands are use-definable.
 
-There is a mandatory command that permits the client to get an event. A client may issue this command repeatedly during intialisation with a server so that it may retrieve its events. A client may also issue this command at a regular interval to poll for new events e.g. when there are no other commands to issue.
+The absence of a command payload signifies a mandatory command that permits the client to get an event. A client may issue this command repeatedly during intialisation with a server so that it may retrieve its events. A client may also issue this command at a regular interval to poll for new events e.g. when there are no other commands to issue.
 
 A server maintains a history of events which may or may not be in relation to the processing of a command received. Events are designated with an offset and are user-definable. Events also convey a time delta relative to the time at being served to diminish the effects of clock drift betweeen a client and server. A client may then normalise an event's time with its own clock.
 
@@ -15,7 +15,7 @@ A server replies to a command with the next "nearest" event. The "nearest" event
 Offsets are held as an unsigned 32 bit integer and may overflow to zero. In the situation of having overflowed, a client must forget all prior events and a server must ensure that any important events are re-sent. A client may detect this
 situation by checking whether the received offset is less than or equal to the one it has.
 
-There is a mandatory event that permits the server to indicate that there are no more events to be replied. This event assists a client in being able to retrieve a history of events during the initialisation with a server.
+The absence of an event payload signifies a mandatory event that permits the server to indicate that there are no more events to be replied. This event assists a client in being able to retrieve a history of events during the initialisation with a server.
 
 A simplified link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address, a server port, an opaque variable length payload, and a CRC for error checking.
 
