@@ -28,7 +28,7 @@ A loss of synchronization between client and server occurs when neither the clie
 
 The protocol requires the server to deliver the oldest event in its history in this scenario.  The client detects the loss of synchronization when the received event does not have the expected offset.
 
-Details of offset calculation and assignment to events are given in `offset_rules.md`.  
+Details of offset calculation and assignment to events are given in [offset-rules.md](offset-rules.md).
 
 ## Event Times
 
