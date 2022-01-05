@@ -48,7 +48,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut recv_buf = [0; MAX_DATAGRAM_SIZE];
     let mut events = CircularQueue::<(Event, u32, Instant)>::with_capacity(MAX_EVENTS);
-    let mut event_offset = 0;
+
+    // Randomise the starting offset to increase the probably of a client
+    // detecting that a server has started up.
+    let mut event_offset = rand::thread_rng().gen_range(0..MAX_EVENTS) as u32;
 
     loop {
         tokio::select! {
@@ -61,15 +64,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                     // We optimise searching for events by going backward in our
                     // circular buffer until we find the latest event where its
-                    // offset exceeds the last one observed by the client. In the
-                    // case where we have no last offset expressed by the client
-                    // then we provide the oldest one we have.
-                    let maybe_reply = events
-                            .iter()
-                            .take_while(|(_, offset, _)| *offset > request.last_event_offset)
-                            .last().or_else(|| events.iter().next());
+                    // offset is adjacent to the last one observed by the client. In the
+                    // case where we have nothing in relation to the last offset expressed
+                    // by the client then we provide the oldest one we have. See the
+                    // offset-rules.md doc for details.
+                    let next_event_offset = request.last_event_offset.checked_add(1).unwrap_or(0);
+                    let mut events_iter =
+                        events
+                        .iter()
+                        .skip_while(|e| e.1 != next_event_offset && e.1 != request.last_event_offset);
+                    let next_e = events_iter.next();
+                    let last_e = events_iter.next();
+                    let maybe_event = match (next_e, last_e) {
+                        (Some(e), _) if e.1 == next_event_offset => next_e,
+                        (_, Some(e)) if e.1 == request.last_event_offset => None,
+                        (Some(e), _) if e.1 == request.last_event_offset => None,
+                        _ => events.iter().last(),
+                    };
 
-                    let reply = flip_flop_app::event_reply(maybe_reply, |t|Instant::now().duration_since(t).as_secs());
+                    let reply = flip_flop_app::event_reply(maybe_event, |t|Instant::now().duration_since(t).as_secs());
 
                     let mut send_buf = [0; MAX_DATAGRAM_SIZE];
                     if let Ok(encoded_buf) = postcard::to_slice(&reply, &mut send_buf) {
@@ -80,16 +93,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             Some(event_instant) = event_r.recv() => {
-                events.push((Event::SomeEvent, event_offset, event_instant));
-
                 // For this example, we will reset the event offset periodically
                 // so that a client can demonstrate how it forgets state.
-                if rand::thread_rng().gen_range(0..10) == 0 {
+                if rand::thread_rng().gen_range(0..40) == 0 {
                     println!("SERVER: Resetting events");
                     events.clear();
-                    event_offset = 0;
+                    event_offset = rand::thread_rng().gen_range(0..MAX_EVENTS) as u32;
                 } else {
-                    event_offset += 1;
+                    println!("SERVER: event stored for offset {}", event_offset);
+                    events.push((Event::SomeEvent, event_offset, event_instant));
+                    event_offset = event_offset.checked_add(1).unwrap_or(0);
                 }
             }
         }
