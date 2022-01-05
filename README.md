@@ -2,20 +2,39 @@
 
 *A single-client/multi-server event-bus protocol suitable for half-duplex communications.*
 
-Flip-flop is an OSI-style application layer protocol optimised for half-duplex communication where a single client may command one of a number of servers. The server matching the address of a command is then expected to respond with an event. Communication is expected to be "best-effort" and the lower levels control the level of guarantees in terms of delivvery.
+Flip-flop is an application layer protocol optimised for half-duplex communication where a single client may monitor and control a number of servers. It can be used in an industrial control setting where it is more flexible than Modbus and similar protocols.  
 
-Commands instruct a server to do something, normally resulting in an event. All commands convey an offset to the last event that the client received so that a server knows the next event it should reply with. Commands are use-definable.
+Flip-flop is flexible because it uses a vocabulary of _commands_ and _events_ specific to each application.  
 
-The absence of a command payload signifies a mandatory command that permits the client to get an event. A client may issue this command repeatedly during intialisation with a server so that it may retrieve its events. A client may also issue this command at a regular interval to poll for new events e.g. when there are no other commands to issue.
+## Protocol Operation
 
-A server maintains a history of events which may or may not be in relation to the processing of a command received. Events are designated with an offset and are user-definable. Events also convey a time delta relative to the time at being served to diminish the effects of clock drift betweeen a client and server. A client may then normalise an event's time with its own clock.
+Protocol operation consists of a series of message exchanges driven by the client.  In the common case the client sends a _command_ to a server which responds with an _event_.  Unlike synchronous request/reply protocols, the command and event may be unrelated and either or both can be omitted from an exchange.  
 
-A server replies to a command with the next "nearest" event. The "nearest" event is where its offset is greater than the command's last offset.
+If the command is omitted the message exchange is termed a _poll_ and the server returns a pending event, if any.
 
-Offsets are held as an unsigned 32 bit integer and may overflow to zero. In the situation of having overflowed, a client must forget all prior events and a server must ensure that any important events are re-sent. A client may detect this
-situation by checking whether the received offset is less than or equal to the one it has.
+A command instructs a server to do something, typically resulting in an event.  An event indicates a change of state in a server which could also be caused by an input, a timer or some other effect on the server. In a data acquisition application events could be frequent and commands infrequent.  
 
-The absence of an event payload signifies a mandatory event that permits the server to indicate that there are no more events to be replied. This event assists a client in being able to retrieve a history of events during the initialisation with a server.
+Command delivery is 'best effort'.   If the transport indicates an error then the client cannot assume the command was or was not delivered.  However the client can ascertain the state of the server and recover in an application specific way.
+
+Event delivery is reliable in the face of transport errors. Other failures, such as a server restart, are detected allowing application specific recovery.  The intent of the event delivery mechanism is that the client can track the relevant state of each server, visible through its events.
+
+## Event Delivery
+
+A numeric _offset_ is assigned to each event by the server that generates it.  The client tracks the offset of the latest event successfully received from each server.  Each command or poll sent by the client carries this offset. The server normally responds with the following event or no event if the client's offset is up to date. 
+
+A server maintains a short history of events. This enables a client to request the same event more than once, in the case of a transport error.  In general the client can fall behind the server by the length of the history. 
+
+A loss of synchronization between client and server occurs when neither the client's offset nor its successor is found in the server's history.  This indicates an overrun where more events were generated on the server than could be stored or delivered.  Alternatively, either the client or the server may have restarted.  In either case application specific recovery may be required.   
+
+The protocol requires the server to deliver the oldest event in its history in this scenario.  The client detects the loss of synchronization when the received event does not have the expected offset.
+
+Details of offset calculation and assignment to events are given in `offset_rules.md`.  
+
+## Event Times
+
+Events also convey a time delta relative to the time at being served to diminish the effects of clock drift between a client and server. A client may then normalise an event's time with its own clock.
+
+## RS485 Link Layer
 
 A simplified link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address, a server port, an opaque variable length payload, and a CRC for error checking.
 
