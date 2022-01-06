@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         local_time, reply, event_count, remote_addr
                     );
                 }
-                let expected_event_offset = last_event_offset.checked_add(1).unwrap_or(0);
+                let expected_event_offset = last_event_offset.wrapping_add(1);
                 match reply.event {
                     Some((_, offset)) if offset != expected_event_offset => {
                         init_mode = true;
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         println!("CLIENT: Previous events for this server are now forgotten given an offset != what we expected");
                     }
                     Some((_, offset)) => {
-                        event_count = event_count.checked_add(1).unwrap_or(0);
+                        event_count = event_count.wrapping_add(1);
                         last_event_offset = offset;
                     }
                     None => init_mode = false,

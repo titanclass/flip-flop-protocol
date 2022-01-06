@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // case where we have nothing in relation to the last offset expressed
                     // by the client then we provide the oldest one we have. See the
                     // offset-rules.md doc for details.
-                    let next_event_offset = request.last_event_offset.checked_add(1).unwrap_or(0);
+                    let next_event_offset = request.last_event_offset.wrapping_add(1);
                     let mut events_iter =
                         events
                         .iter()
@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 } else {
                     println!("SERVER: event stored for offset {}", event_offset);
                     events.push((Event::SomeEvent, event_offset, event_instant));
-                    event_offset = event_offset.checked_add(1).unwrap_or(0);
+                    event_offset = event_offset.wrapping_add(1);
                 }
             }
         }
