@@ -35,8 +35,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // framing.
     const MAX_DATAGRAM_SIZE: usize = 32;
 
-    let mut last_event_offset = 0;
-    let mut event_count = 0;
+    let mut last_event_offset = 0_u32;
+    let mut event_count = 0_u32;
 
     println!("CLIENT: listening on {:?}", local_addr);
 
@@ -84,22 +84,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         local_time, reply, event_count, remote_addr
                     );
                 }
+                let expected_event_offset = last_event_offset.wrapping_add(1);
                 match reply.event {
-                    None => init_mode = false,
-                    Some((_, offset)) if offset <= last_event_offset => {
+                    Some((_, offset)) if offset != expected_event_offset => {
                         init_mode = true;
                         event_count = 0;
                         last_event_offset = offset;
-                        println!("CLIENT: Previous events for this server are now forgotten given an offset <= what we know");
+                        println!("CLIENT: Previous events for this server are now forgotten given an offset != what we expected");
                     }
                     Some((_, offset)) => {
-                        event_count += 1;
+                        event_count = event_count.wrapping_add(1);
                         last_event_offset = offset;
                     }
+                    None => init_mode = false,
                 }
             }
         }
 
-        next_send_time += Duration::from_secs(1);
+        next_send_time += Duration::from_secs(1); // Bit of a problem when we reach the end of time... ;-)
     }
 }
