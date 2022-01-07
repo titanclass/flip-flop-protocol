@@ -46,7 +46,6 @@ pub struct CommandRequest<C: DeserializeOwned + Serialize> {
 /// +---+---+---+---+---+---+---+---+-------+
 /// |          delta_ticks          | event |
 ///
-
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct EventReply<E: DeserializeOwned + Serialize> {
     /// The age of this event in relation to the server's notion of current time,

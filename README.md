@@ -36,7 +36,7 @@ Events also convey a time delta relative to the time at being served to diminish
 
 ## RS485 Link Layer
 
-A simplified link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address, a server port, an opaque variable length payload, and a CRC for error checking.
+A simplified link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address, a server port, an opaque variable length payload, and a encryption for authentication and error checking.
 
 ## Why flip-flop?
 
