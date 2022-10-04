@@ -1,19 +1,26 @@
 use std::env;
 
+fn help(name: &str) -> i32 {
+    {
+        println!("usage: {} stations [time_slots [addresses]]", name);
+        0
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
     match args.len() {
+        1 => simulate(128, 400, 255),
+        2 if args[1] == "--help" => help(&args[0]),
+        2 => simulate(args[1].parse().unwrap(), 400, 255),
+        3 => simulate(args[1].parse().unwrap(), args[2].parse().unwrap(), 255),
         4 => simulate(
             args[1].parse().unwrap(),
             args[2].parse().unwrap(),
             args[3].parse().unwrap(),
         ),
-        3 => round(args[1].parse().unwrap(), args[2].parse().unwrap()),
-        _ => {
-            println!("usage: {} stations time_slots [addresses]", args[0]);
-            0
-        }
+        _ => help(&args[0]),
     };
 }
 
