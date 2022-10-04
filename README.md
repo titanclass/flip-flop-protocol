@@ -34,9 +34,57 @@ Details of offset calculation and assignment to events are given in [offset-rule
 
 Events also convey a time delta relative to the time at being served to diminish the effects of clock drift between a client and server. A client may then normalise an event's time with its own clock.
 
-## RS485 Link Layer
+## Data Link Layer
 
-A simplified link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address, a server port, an opaque variable length payload, and a encryption for authentication and error checking.
+A simplified data link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address for up to 255 devices, 8 server ports per device, an opaque variable length payload, and a encryption for authentication and error checking.
+
+## Server discovery
+
+> Server discovery relies on a pre-shared key between the client and servers. In the case where a key may be
+> assumed e.g. a well known key of "0000000000000000", it is prone to man-in-the-middle attacks 
+> and so server discovery should be performed in a controlled manner e.g. when an operator temporarily puts the client into a 
+> mode of discovery having physically installed a client and/or one or more servers. Server discovery is not intended 
+> to run continuously with keys that are not pre-shared.
+
+The data link layer provides an optional discovery protocol that can be used in addition to it. The protocol depends on the data link packet format for its address scheme and the ability to detect corrupt packets via its MIC.
+
+ When activated, the discovery protocol is able to automatically discover new servers. The client initiates server discovery.
+
+The client sends an "identify" message to all servers. An identify message has a data source of "client", an
+address of 0x00 and a port of 0x00. The payload is a bit field of 256 bits (32 bytes). The MIC is formed using
+a well known key shared between the client and servers.
+
+The identify message bit field has bits set in positions that represent a server address between 0 and 255 e.g. bit 1 represents addresss 1, bit 14 represents address 14 and so on. These server addresses
+are the ones known to the client when broadcasting an identify message. The first time a client runs it will 
+have no prior knowledge of any server and so all bits will be set to 0.
+
+Servers that do not already have an address represented by the identify message's bit field are required to reply
+with a payload indicating a value between 1 and 255, which will become its address. This generated address must
+not conflict with an address already known to the client i.e. the number is not in conflict with addresses 
+indicated by the identify message's bit field.
+
+Each server replies within a time window and at a random time within that window. The length of the time
+window is recommended to be 900ms. At 115200 baud, 12,800 bytes can be transmitted in 1 second, including 
+1 stop bit for each byte. The client packet size is 41 bytes (4 byte header, 4 byte MIC, and 
+a 32 byte payload including its length byte). At 41 bytes, the client's identification message will be less than 4ms on the wire. A server reply will contain a 1 byte payload and is therefore 13 bytes. The
+server's reply will be on the wire for less than 2ms. Given a time window of 1000ms and 4ms for the client to transmit, there are
+994ms remaining for servers to reply also given the 2ms on the wire for a server reply. 
+Some time should be allowed for a server to detect, receive and process a client request. Rounding the time window
+down to 900ms is reasonable.
+
+There is always the opportunity for contention where two or more servers transmit at the same time and therefore
+garble the message at the client. Server discover relies on the data link MIC to detect message integrity.
+
+The client keeps track of the valid server replies it receives and notes their generated address.
+
+Once the time window has passed (1 second from the client's perspective), the client will determine if it needs
+to re-issue an identify message. It will do so if any invalid MICs were received, or if any of the server generated
+addresses conflict with each other. Prior to re-issuing an identify message, those MICs that were valid and the
+corresponding server generated addresses are distinct, are added to the bit field.
+
+The discovery process continues until there are no more invalid MICs and no more address conflicts. Modelling has
+shown that the worst-case scenario should be 12 iterations given 255 servers. In practice, server discovery 
+often completes over 5 seconds.
 
 ## Why flip-flop?
 

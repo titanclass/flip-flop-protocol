@@ -1,10 +1,24 @@
 #![cfg_attr(not(test), no_std)]
 #![doc = include_str!("../README.md")]
 
+pub mod discovery;
+
+use aead::{generic_array::GenericArray, AeadInPlace};
+use heapless::Vec;
 use serde::{Deserialize, Serialize};
 
+/// The size of a data frame header including the byte length for the payload.
+/// The byte length value is not to exceed 127.
+pub const HEADER_SIZE: usize = 5;
+
+/// The size of the MIC code at the tail of the payload
+pub const MIC_SIZE: usize = 4;
+
+/// The size of the Nonce used for encryption
+pub const NONCE_SIZE: usize = 7;
+
 /// Indicates where data is sourced from i.e. its direction.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum DataSource {
     Client,
     Server,
@@ -12,19 +26,19 @@ pub enum DataSource {
 
 /// There was an error parsing the data frame's header. Possibly due
 /// to an incompatible data frame version.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ParseError {}
 
 /// The haader fields of the data frame.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Header {
     /// The protocol version. Should be 0.
     pub version: u8,
     /// The direction of data flow.
     pub source: DataSource,
-    /// The address of the server 0..31.
+    /// The address of the server 0..255.
     pub server_address: u8,
-    /// The port of the server 0..31.
+    /// The port of the server 0..7.
     pub server_port: u8,
     /// A frame counter for ensuring message authenticity by
     /// being able to vary a nonce. Should be incremented by
@@ -34,7 +48,7 @@ pub struct Header {
 }
 
 impl Header {
-    /// Returns the byte representation of the header
+    /// Returns the byte representation of the header.
     pub fn to_packed(&self) -> u32 {
         let source = if self.source == DataSource::Client {
             0
@@ -42,8 +56,8 @@ impl Header {
             1
         };
         (source << 2)
-            | (((self.server_address as u32) & 0x1F) << 3)
-            | (((self.server_port as u32) & 0x1F) << 8)
+            | (((self.server_address as u32) & 0xFF) << 3)
+            | (((self.server_port as u32) & 0x07) << 11)
             | (((self.frame_counter as u32) & 0xFFFF) << 16)
     }
 
@@ -59,8 +73,8 @@ impl Header {
             1 => Some(DataSource::Server),
             _ => None,
         };
-        let server_address = (header >> 3) & 0x1F;
-        let server_port = (header >> 8) & 0x1F;
+        let server_address = (header >> 3) & 0xFF;
+        let server_port = (header >> 11) & 0x07;
         let frame_counter = (header >> 16) & 0xFFFF;
 
         match (version, source) {
@@ -78,14 +92,14 @@ impl Header {
 
 /// A data frame encapsulates client and server packets
 /// and provides for error checking.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DataFrame<'a> {
     /// Bits as follows:
-    /// 0..=1   protocol version
-    /// 2..=2   source 0 = client, 1 = server
-    /// 3..=7   server address
-    /// 8..=12  server port
-    /// 13..=15 reserved - must be zero
+    /// 00..=01 protocol version 00
+    /// 02..=02 source 0 = client, 1 = server
+    /// 03..=10 server address
+    /// 11..=13 server port
+    /// 14..=15 reserved - must be zero
     /// 16..=31 frame counter
     pub header: u32,
     /// Payload data appended with a Message Authentication Code (MAC) using AES-128 CCM
@@ -114,27 +128,82 @@ pub fn new_nonce(header: u32, payload_len: usize) -> [u8; 7] {
     ]
 }
 
-/// The size of a data frame header including the byte length for the payload.
-/// The byte length value is not to exceed 127.
-pub const HEADER_SIZE: usize = 5;
+/// Conveniently decodes a datagram with a fixed length of N given a condition and,
+/// if successful, validates the header and decrypts the payload.
+pub fn from_datagram<const N: usize>(
+    datagram_buf: &[u8; N],
+    filter: impl FnOnce(&Header) -> bool,
+    cipher: &impl AeadInPlace,
+) -> Option<(Header, Vec<u8, N>)> {
+    if let Ok(data_frame) = postcard::from_bytes::<DataFrame>(datagram_buf) {
+        if let Ok(header) = Header::parse(data_frame.header) {
+            if filter(&header) {
+                let nonce = new_nonce(
+                    data_frame.header,
+                    data_frame.encrypted_payload.len() - MIC_SIZE,
+                );
 
-/// The size of the MIC code at the tail of the payload
-pub const MIC_SIZE: usize = 4;
+                let mut crypt_payload_buf = Vec::new();
+                let _ = crypt_payload_buf.extend_from_slice(data_frame.encrypted_payload);
+                if cipher
+                    .decrypt_in_place(
+                        GenericArray::from_slice(&nonce),
+                        &data_frame.header.to_be_bytes(),
+                        &mut crypt_payload_buf,
+                    )
+                    .is_ok()
+                {
+                    return Some((header, crypt_payload_buf));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Conveniently encrypts a payload and encodes the header and encrypted payload into
+/// a datagram with a fixed length of N.
+pub fn to_datagram<const N: usize>(
+    cipher: &impl AeadInPlace,
+    header: &Header,
+    payload_buf: &[u8],
+    datagram_buf: &mut [u8; N],
+) {
+    let packed_header = header.to_packed();
+    let header_bytes = packed_header.to_be_bytes();
+
+    let nonce = new_nonce(packed_header, payload_buf.len());
+
+    let mut crypt_payload_buf: Vec<u8, N> = Vec::new();
+    crypt_payload_buf.extend_from_slice(payload_buf).unwrap();
+    cipher
+        .encrypt_in_place(
+            GenericArray::from_slice(&nonce),
+            &header_bytes,
+            &mut crypt_payload_buf,
+        )
+        .unwrap();
+
+    let data_frame = DataFrame {
+        header: packed_header,
+        encrypted_payload: &crypt_payload_buf,
+    };
+    postcard::to_slice(&data_frame, datagram_buf).unwrap();
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use aead::KeyInit;
     use aes::Aes128;
-    use ccm::aead::AeadInPlace;
-    use ccm::aead::{generic_array::GenericArray, NewAead};
     use ccm::{
         consts::{U4, U7},
         Ccm,
     };
-    use heapless::Vec;
 
     #[test]
-    fn test_command_serialisation() {
+    fn test_datagram_serialisation() {
         type AesCcm = Ccm<Aes128, U4, U7>;
 
         let key = GenericArray::from_slice(b"0123456789ABCDEF");
@@ -143,84 +212,54 @@ mod tests {
         let header = Header {
             version: 0,
             source: DataSource::Server,
-            server_address: 31,
-            server_port: 2,
+            server_address: 255,
+            server_port: 7,
             frame_counter: 1,
         };
 
-        let packed_header = header.to_packed();
-        let header_bytes = packed_header.to_be_bytes();
+        let payload_buf = b"some data";
+        let mut datagram_buf = [0; 32];
+        to_datagram(&cipher, &header, payload_buf, &mut datagram_buf);
 
-        let payload = b"some data";
-        let mut encrypted_payload: Vec<u8, 128> = Vec::new();
-        let _ = encrypted_payload.extend_from_slice(payload).unwrap();
-
-        let nonce = new_nonce(packed_header, payload.len());
-
-        let _ = cipher
-            .encrypt_in_place(
-                GenericArray::from_slice(&nonce),
-                &header_bytes,
-                &mut encrypted_payload,
-            )
-            .unwrap();
-
-        let expected_frame = DataFrame {
-            header: packed_header,
-            encrypted_payload: &encrypted_payload,
-        };
         assert_eq!(
-            expected_frame,
-            DataFrame {
-                header: 0b000000000000001_000000_10_11111_1_00,
-                encrypted_payload: &[74, 164, 23, 189, 104, 81, 155, 24, 180, 35, 193, 13, 149],
-            }
+            datagram_buf,
+            [
+                252, 255, 4, 13, 145, 171, 66, 62, 129, 223, 68, 168, 6, 69, 126, 97, 64, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ]
         );
     }
 
     #[test]
-    fn test_command_deserialisation() {
+    fn test_datagram_deserialisation() {
         type AesCcm = Ccm<Aes128, U4, U7>;
 
         let key = GenericArray::from_slice(b"0123456789ABCDEF");
         let cipher = AesCcm::new(key);
 
-        let data_frame = DataFrame {
-            header: 0b000000000000001_000000_10_11111_1_00,
-            encrypted_payload: &[74, 164, 23, 189, 104, 81, 155, 24, 180, 35, 193, 13, 149],
-        };
+        let datagram_buf = [
+            252, 255, 4, 13, 145, 171, 66, 62, 129, 223, 68, 168, 6, 69, 126, 97, 64, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
 
-        let header = Header::parse(data_frame.header).unwrap();
+        let (header, payload_buf) = from_datagram(
+            &datagram_buf,
+            |h| h.source == DataSource::Server && h.server_address == 255 && h.server_port == 7,
+            &cipher,
+        )
+        .unwrap();
 
-        let expected_header = Header {
-            version: 0,
-            source: DataSource::Server,
-            server_address: 31,
-            server_port: 2,
-            frame_counter: 1,
-        };
-
-        assert_eq!(header, expected_header);
-
-        let nonce = new_nonce(
-            data_frame.header,
-            data_frame.encrypted_payload.len() - MIC_SIZE,
+        assert_eq!(
+            header,
+            Header {
+                version: 0,
+                source: DataSource::Server,
+                server_address: 255,
+                server_port: 7,
+                frame_counter: 1,
+            }
         );
 
-        let mut decrypted_payload: Vec<u8, 128> = Vec::new();
-        let _ = decrypted_payload
-            .extend_from_slice(data_frame.encrypted_payload)
-            .unwrap();
-        let _ = cipher
-            .decrypt_in_place(
-                GenericArray::from_slice(&nonce),
-                &data_frame.header.to_be_bytes(),
-                &mut decrypted_payload,
-            )
-            .unwrap();
-
-        let expected_payload = b"some data";
-
-        assert_eq!(decrypted_payload, expected_payload);
+        assert_eq!(payload_buf, b"some data");
     }
 }

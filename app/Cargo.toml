@@ -6,11 +6,11 @@ name = "flip-flop-app"
 version = "0.1.0"
 
 [dependencies]
-serde = { version = "1.0.126", default-features = false }
+serde = { version = "1.0", default-features = false }
 
 [dev-dependencies]
-chrono = "0.4.19"
-circular-queue = "0.2.6"
-postcard = "0.7.0"
-rand = "0.8.4"
+chrono = "0.4"
+circular-queue = "0.2"
+postcard = "1.0"
+rand = "0.8"
 tokio = { version = "1", features = ["full", "tracing"] }

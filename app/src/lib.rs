@@ -17,7 +17,7 @@ use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize, Serializ
 /// +---+---+---+---+---------+
 /// |     offset    | command |
 ///
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CommandRequest<C: DeserializeOwned + Serialize> {
     /// The last offset of the server recorded by the client.
     pub last_event_offset: u32,
@@ -46,7 +46,7 @@ pub struct CommandRequest<C: DeserializeOwned + Serialize> {
 /// +---+---+---+---+---+---+---+---+-------+
 /// |          delta_ticks          | event |
 ///
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EventReply<E: DeserializeOwned + Serialize> {
     /// The age of this event in relation to the server's notion of current time,
     /// expressed in a manner agreed between a client and server e.g. ticks can
@@ -123,7 +123,7 @@ mod tests {
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&request, &mut buf).unwrap();
-        assert_eq!(serialised, [9, 0, 0, 0, 2]);
+        assert_eq!(serialised, [9, 2]);
         assert_eq!(
             postcard::from_bytes::<CommandRequest<Command>>(serialised).unwrap(),
             CommandRequest {
@@ -148,7 +148,7 @@ mod tests {
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&request, &mut buf).unwrap();
-        assert_eq!(serialised, [0, 0, 0, 0]);
+        assert_eq!(serialised, [0]);
         assert_eq!(
             postcard::from_bytes::<CommandRequest<Command>>(serialised).unwrap(),
             CommandRequest {
@@ -170,7 +170,7 @@ mod tests {
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
-        assert_eq!(serialised, [10, 0, 0, 0, 0, 0, 0, 0, 1, 9, 0, 0, 0]);
+        assert_eq!(serialised, [10, 1, 9]);
         assert_eq!(
             postcard::from_bytes::<EventReply<Event>>(serialised).unwrap(),
             EventReply {
@@ -192,7 +192,7 @@ mod tests {
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
-        assert_eq!(serialised, [0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(serialised, [0]);
         assert_eq!(
             postcard::from_bytes::<EventReply<Event>>(serialised).unwrap(),
             EventReply {
