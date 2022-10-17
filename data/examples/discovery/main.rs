@@ -45,12 +45,12 @@ mod client {
             let time_window = time::timeout(CLIENT_TIME_WINDOW, future::pending::<()>());
             tokio::pin!(time_window);
 
-            let mut server_addresses = [0; MAX_ADDRESSES];
+            let mut addresses = [0; MAX_ADDRESSES];
             loop {
                 tokio::select! {
                     r = rx.recv() => if let Ok(encrypted_payload) = r {
                         if let Some(identified) = process_server_reply(&cipher, &encrypted_payload) {
-                            server_addresses[identified.server_address as usize] += 1;
+                            addresses[identified.server_address as usize] += 1;
                         } else {
                             finished = false;
                         }
@@ -63,10 +63,10 @@ mod client {
                     }
                 }
             }
-            for (server_address, count) in server_addresses.iter().enumerate() {
+            for (address, count) in addresses.iter().enumerate() {
                 let count = *count;
                 if count == 1 {
-                    identify.set_server_address(server_address as u8);
+                    identify.set_address(address as u8);
                 } else if count > 1 {
                     finished = false;
                 }
@@ -137,7 +137,7 @@ mod server {
         if let Ok(encrypted_payload) = rx.recv().await {
             if let Some(identify) = process_client_request(&cipher, &encrypted_payload) {
                 if server_address
-                    .map(|sa| !identify.is_server_address_set(sa))
+                    .map(|sa| !identify.is_address_set(sa))
                     .unwrap_or(true)
                 {
                     if let Some(identified) = try_create_server_reply(
@@ -214,8 +214,9 @@ async fn main() {
         });
     }
 
-    let server_addresses = [0; MIN_PAYLOAD_SIZE];
-    let mut identify = Identify { server_addresses };
+    let addresses = [0; MIN_PAYLOAD_SIZE];
+    let mut identify = Identify { addresses };
+    identify.set_address(0); // Address 0 is the client and is therefore reserved
     let mut frame_counter = 0u16;
     loop {
         if client::task(&tx, &mut identify, frame_counter).await {

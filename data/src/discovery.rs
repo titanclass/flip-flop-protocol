@@ -5,7 +5,8 @@ use crate::{HEADER_SIZE, MIC_SIZE};
 
 const ADDRESSES_PER_BYTE: usize = 8; // CANNOT CHANGE
 
-/// The maximum number of address we can have on one network.
+/// The maximum number of address we can have on one network. Address 0
+/// always represents the client.
 pub const MAX_ADDRESSES: usize = 256;
 
 /// The minimum size of all payloads on the data link layer given
@@ -21,7 +22,7 @@ pub const MIN_PACKET_SIZE: usize = HEADER_SIZE + MIN_PAYLOAD_SIZE + MIC_SIZE;
 /// with a requested address.
 #[derive(Deserialize, Serialize)]
 pub struct Identify {
-    pub server_addresses: [u8; MIN_PAYLOAD_SIZE],
+    pub addresses: [u8; MIN_PAYLOAD_SIZE],
 }
 
 /// The payload a server replies with requesting an address
@@ -33,57 +34,50 @@ pub struct Identified {
 
 impl Identify {
     /// Returns true if a given address is known to the client.
-    pub fn is_server_address_set(&self, server_address: u8) -> bool {
-        assert!((server_address as usize) < MAX_ADDRESSES);
-        (self.server_addresses[server_address as usize / ADDRESSES_PER_BYTE]
-            & 1 << (server_address % (ADDRESSES_PER_BYTE as u8)))
+    pub fn is_address_set(&self, address: u8) -> bool {
+        assert!((address as usize) < MAX_ADDRESSES);
+        (self.addresses[address as usize / ADDRESSES_PER_BYTE]
+            & 1 << (address % (ADDRESSES_PER_BYTE as u8)))
             != 0
     }
 
     /// An iterator that returns true for addresses known to the client.
-    pub fn iter(&self) -> ServerAddressesIter {
-        ServerAddressesIter {
+    pub fn iter(&self) -> AddressesIter {
+        AddressesIter {
             i: 0,
             j: 1,
-            server_addresses: &self.server_addresses,
+            addresses: &self.addresses,
         }
     }
 
     /// Modify the set of addresses known to the client with a new
     /// one.
-    pub fn set_server_address(&mut self, server_address: u8) {
-        assert!((server_address as usize) < MAX_ADDRESSES);
-        self.server_addresses[server_address as usize / 8] |=
-            1 << (server_address % (ADDRESSES_PER_BYTE as u8));
+    pub fn set_address(&mut self, address: u8) {
+        assert!((address as usize) < MAX_ADDRESSES);
+        self.addresses[address as usize / 8] |= 1 << (address % (ADDRESSES_PER_BYTE as u8));
     }
 }
 
-/// An iterator that returns true for each server address known
-/// to the client. Note that address 0 is reserved by the client
-/// for broadcasting and so will always return true.
-pub struct ServerAddressesIter<'d> {
+/// An iterator that returns true for each address known
+/// to the client.
+pub struct AddressesIter<'d> {
     i: usize,
     j: u8,
-    server_addresses: &'d [u8],
+    addresses: &'d [u8],
 }
 
-impl<'d> Iterator for ServerAddressesIter<'d> {
+impl<'d> Iterator for AddressesIter<'d> {
     type Item = bool;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.i < MIN_PAYLOAD_SIZE {
-            if self.i == 0 && self.j == 1 {
-                self.j = 2;
-                Some(true)
-            } else {
-                let item = self.server_addresses[self.i] & self.j != 0;
-                self.j <<= 1;
-                if self.j == 0 {
-                    self.i += 1;
-                    self.j = 1;
-                }
-                Some(item)
+            let item = self.addresses[self.i] & self.j != 0;
+            self.j <<= 1;
+            if self.j == 0 {
+                self.i += 1;
+                self.j = 1;
             }
+            Some(item)
         } else {
             None
         }
@@ -96,7 +90,7 @@ impl Identified {
     /// is returned, and randomly picks an address with the ones that remain to be
     /// known to the client. A return value of None signals that no address can be
     /// found. This can happen if there are no addresses left to be allocated.
-    pub fn with_random_address<T>(iter: ServerAddressesIter<'_>, rng: &mut T) -> Option<Self>
+    pub fn with_random_address<T>(iter: AddressesIter<'_>, rng: &mut T) -> Option<Self>
     where
         T: RngCore,
     {
@@ -148,24 +142,24 @@ mod tests {
     #[test]
     fn test_set_get_bits() {
         let mut identify = Identify {
-            server_addresses: [0; MIN_PAYLOAD_SIZE],
+            addresses: [0; MIN_PAYLOAD_SIZE],
         };
-        identify.set_server_address(1);
-        identify.set_server_address(9);
-        assert_eq!(identify.server_addresses[0], 0b00000010);
-        assert_eq!(identify.server_addresses[1], 0b00000010);
-        assert!(identify.is_server_address_set(1));
-        assert!(identify.is_server_address_set(9));
-        assert!(!identify.is_server_address_set(10));
+        identify.set_address(1);
+        identify.set_address(9);
+        assert_eq!(identify.addresses[0], 0b00000010);
+        assert_eq!(identify.addresses[1], 0b00000010);
+        assert!(identify.is_address_set(1));
+        assert!(identify.is_address_set(9));
+        assert!(!identify.is_address_set(10));
     }
 
     #[test]
     fn test_identified_with_none_free() {
         let mut identify = Identify {
-            server_addresses: [0; MIN_PAYLOAD_SIZE],
+            addresses: [0; MIN_PAYLOAD_SIZE],
         };
-        for server_address in 0..MAX_ADDRESSES {
-            identify.set_server_address(server_address as u8);
+        for address in 0..MAX_ADDRESSES {
+            identify.set_address(address as u8);
         }
         let mut rng_fixture: RngFixture = RngFixture { return_val: 1 };
         assert_eq!(
@@ -177,10 +171,10 @@ mod tests {
     #[test]
     fn test_identified_with_one_free() {
         let mut identify = Identify {
-            server_addresses: [0; MIN_PAYLOAD_SIZE],
+            addresses: [0; MIN_PAYLOAD_SIZE],
         };
-        for server_address in 2..MAX_ADDRESSES {
-            identify.set_server_address(server_address as u8);
+        for address in 2..MAX_ADDRESSES {
+            identify.set_address(address as u8);
         }
 
         let mut rng_fixture: RngFixture = RngFixture { return_val: 1 };
@@ -193,10 +187,11 @@ mod tests {
     #[test]
     fn test_identified_with_three_free() {
         let mut identify = Identify {
-            server_addresses: [0; MIN_PAYLOAD_SIZE],
+            addresses: [0; MIN_PAYLOAD_SIZE],
         };
-        for server_address in 4..MAX_ADDRESSES {
-            identify.set_server_address(server_address as u8);
+        identify.set_address(0);
+        for address in 4..MAX_ADDRESSES {
+            identify.set_address(address as u8);
         }
 
         let mut rng_fixture: RngFixture = RngFixture { return_val: 2 };
@@ -208,9 +203,10 @@ mod tests {
 
     #[test]
     fn test_identified_with_all_but_first_free() {
-        let identify = Identify {
-            server_addresses: [0; MIN_PAYLOAD_SIZE],
+        let mut identify = Identify {
+            addresses: [0; MIN_PAYLOAD_SIZE],
         };
+        identify.set_address(0);
 
         let mut rng_fixture: RngFixture = RngFixture { return_val: 254 };
         assert_eq!(
