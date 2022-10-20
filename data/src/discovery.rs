@@ -96,7 +96,15 @@ impl Identified {
     /// is returned, and randomly picks an address with the ones that remain to be
     /// known to the client. A return value of None signals that no address can be
     /// found. This can happen if there are no addresses left to be allocated.
-    pub fn with_random_address<T>(iter: AddressesIter<'_>, rng: &mut T) -> Option<Self>
+    ///
+    /// The `server_ports` parameter is as per the `Identified` structure's field
+    /// and conveys a bitmask of ports that are supported by the server. The returned
+    /// structure carries this field forward.
+    pub fn with_random_address<T>(
+        iter: AddressesIter<'_>,
+        rng: &mut T,
+        server_ports: u8,
+    ) -> Option<Self>
     where
         T: RngCore,
     {
@@ -112,7 +120,7 @@ impl Identified {
             let j = (rng.next_u32() % (j as u32)) as usize;
             Some(Self {
                 server_address: spare_addresses[j] as u8,
-                server_ports: 0b00000010,
+                server_ports,
             })
         } else {
             None
@@ -170,7 +178,7 @@ mod tests {
         }
         let mut rng_fixture: RngFixture = RngFixture { return_val: 1 };
         assert_eq!(
-            Identified::with_random_address(identify.iter(), &mut rng_fixture),
+            Identified::with_random_address(identify.iter(), &mut rng_fixture, 0b00000010),
             None
         );
     }
@@ -186,7 +194,7 @@ mod tests {
 
         let mut rng_fixture: RngFixture = RngFixture { return_val: 1 };
         assert_eq!(
-            Identified::with_random_address(identify.iter(), &mut rng_fixture),
+            Identified::with_random_address(identify.iter(), &mut rng_fixture, 0b00000010),
             Some(Identified {
                 server_address: 1,
                 server_ports: 0b00000010,
@@ -206,7 +214,7 @@ mod tests {
 
         let mut rng_fixture: RngFixture = RngFixture { return_val: 2 };
         assert_eq!(
-            Identified::with_random_address(identify.iter(), &mut rng_fixture),
+            Identified::with_random_address(identify.iter(), &mut rng_fixture, 0b00000010),
             Some(Identified {
                 server_address: 3,
                 server_ports: 0b00000010,
@@ -223,7 +231,7 @@ mod tests {
 
         let mut rng_fixture: RngFixture = RngFixture { return_val: 254 };
         assert_eq!(
-            Identified::with_random_address(identify.iter(), &mut rng_fixture),
+            Identified::with_random_address(identify.iter(), &mut rng_fixture, 0b00000010),
             Some(Identified {
                 server_address: 255,
                 server_ports: 0b00000010,

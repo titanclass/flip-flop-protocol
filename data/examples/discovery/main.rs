@@ -174,7 +174,7 @@ mod server {
         datagram_buf: &mut [u8; MIN_PACKET_SIZE],
     ) -> Option<Identified> {
         if let Some(identified) =
-            Identified::with_random_address(identify.iter(), &mut rand::thread_rng())
+            Identified::with_random_address(identify.iter(), &mut rand::thread_rng(), 0b00000010)
         {
             let header = Header {
                 version: 0,
