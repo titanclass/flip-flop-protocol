@@ -30,6 +30,12 @@ pub struct Identify {
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Identified {
     pub server_address: u8,
+    /// A bit field representing each port supported by
+    /// the server e.g. bit 1 represents that port 1 is
+    /// supported. The client application can then determine
+    /// the type of server being represented given how
+    /// each port is to be used.
+    pub server_ports: u8,
 }
 
 impl Identify {
@@ -106,6 +112,7 @@ impl Identified {
             let j = (rng.next_u32() % (j as u32)) as usize;
             Some(Self {
                 server_address: spare_addresses[j] as u8,
+                server_ports: 0b00000010,
             })
         } else {
             None
@@ -180,7 +187,10 @@ mod tests {
         let mut rng_fixture: RngFixture = RngFixture { return_val: 1 };
         assert_eq!(
             Identified::with_random_address(identify.iter(), &mut rng_fixture),
-            Some(Identified { server_address: 1 })
+            Some(Identified {
+                server_address: 1,
+                server_ports: 0b00000010,
+            })
         );
     }
 
@@ -197,7 +207,10 @@ mod tests {
         let mut rng_fixture: RngFixture = RngFixture { return_val: 2 };
         assert_eq!(
             Identified::with_random_address(identify.iter(), &mut rng_fixture),
-            Some(Identified { server_address: 3 })
+            Some(Identified {
+                server_address: 3,
+                server_ports: 0b00000010,
+            })
         );
     }
 
@@ -212,7 +225,8 @@ mod tests {
         assert_eq!(
             Identified::with_random_address(identify.iter(), &mut rng_fixture),
             Some(Identified {
-                server_address: 255
+                server_address: 255,
+                server_ports: 0b00000010,
             })
         );
     }
