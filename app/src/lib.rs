@@ -17,7 +17,7 @@ use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize, Serializ
 /// +---+---+---+---+---------+
 /// |     offset    | command |
 ///
-#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CommandRequest<C: DeserializeOwned + Serialize> {
     /// The last offset of the server recorded by the client.
     pub last_event_offset: u32,
@@ -46,7 +46,7 @@ pub struct CommandRequest<C: DeserializeOwned + Serialize> {
 /// +---+---+---+---+---+---+---+---+-------+
 /// |          delta_ticks          | event |
 ///
-#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EventReply<E: DeserializeOwned + Serialize> {
     /// The age of this event in relation to the server's notion of current time,
     /// expressed in a manner agreed between a client and server e.g. ticks can
