@@ -238,4 +238,23 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn test_iter_with_skip() {
+        let mut identify = Identify {
+            addresses: [0; MIN_PAYLOAD_SIZE],
+        };
+        identify.set_address(0);
+        identify.set_address(3);
+
+        assert_eq!(
+            identify
+                .iter()
+                .enumerate()
+                .skip(1)
+                .skip_while(|(_, is_set)| !*is_set)
+                .next(),
+            Some((3, true))
+        );
+    }
 }
