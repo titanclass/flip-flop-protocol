@@ -49,16 +49,22 @@ pub struct Header {
 
 impl Header {
     /// Returns the byte representation of the header.
-    pub fn to_packed(&self) -> u32 {
+    pub fn to_packed(&self) -> (u8, u8, u8, u8) {
         let source = if self.source == DataSource::Client {
             0
         } else {
             1
         };
-        (source << 2)
+        let header = (source << 2)
             | (((self.server_address as u32) & 0xFF) << 3)
             | (((self.server_port as u32) & 0x07) << 11)
-            | (((self.frame_counter as u32) & 0xFFFF) << 14)
+            | (((self.frame_counter as u32) & 0xFFFF) << 16);
+        (
+            ((header & 0xff000000) >> 24) as u8,
+            ((header & 0x00ff0000) >> 16) as u8,
+            ((header & 0x0000ff00) >> 8) as u8,
+            (header & 0x000000ff) as u8,
+        )
     }
 
     /// Parse the contents of the data frame header.
@@ -66,7 +72,11 @@ impl Header {
     /// then an error is returned. Otherwise, the header
     /// and encrypted payload (including a MAC at the end)
     /// are returned.
-    pub fn parse(header: u32) -> Result<Header, ParseError> {
+    pub fn parse(header: (u8, u8, u8, u8)) -> Result<Header, ParseError> {
+        let header = ((header.0 as u32) << 24)
+            | ((header.1 as u32) << 16)
+            | ((header.2 as u32) << 8)
+            | (header.3 as u32);
         let version = header & 0x02;
         let source = match (header >> 2) & 0x01 {
             0 => Some(DataSource::Client),
@@ -75,7 +85,7 @@ impl Header {
         };
         let server_address = (header >> 3) & 0xFF;
         let server_port = (header >> 11) & 0x07;
-        let frame_counter = (header >> 14) & 0xFFFF;
+        let frame_counter = (header >> 16) & 0xFFFF;
 
         match (version, source) {
             (0, Some(source)) => Ok(Header {
@@ -99,9 +109,9 @@ pub struct DataFrame<'a> {
     /// 02..=02 source 0 = client, 1 = server
     /// 03..=10 server address
     /// 11..=13 server port
-    /// 14..=29 frame counter
-    /// 30..=31 reserved - must be zero
-    pub header: u32,
+    /// 14..=15 reserved - must be zero
+    /// 16..=31 frame counter
+    pub header: (u8, u8, u8, u8),
     /// Payload data appended with a Message Authentication Code (MAC) using AES-128 CCM
     /// with a 4 byte MIC and a 7 byte nonce derived using the [new_nonce] function.
     /// This will be required to have a one byte length as the first byte.
@@ -116,13 +126,13 @@ pub struct DataFrame<'a> {
 /// 1..=4   packed header in big endian form
 /// 5..=5   payload len
 /// 6..=6   always 0x00
-pub fn new_nonce(header: u32, payload_len: usize) -> [u8; 7] {
+pub fn new_nonce(header: (u8, u8, u8, u8), payload_len: usize) -> [u8; 7] {
     [
         0x01,
-        ((header & 0xff000000) >> 24) as u8,
-        ((header & 0x00ff0000) >> 16) as u8,
-        ((header & 0x0000ff00) >> 8) as u8,
-        (header & 0x000000ff) as u8,
+        header.0,
+        header.1,
+        header.2,
+        header.3,
         payload_len as u8,
         0x00,
     ]
@@ -148,7 +158,12 @@ pub fn from_datagram<const N: usize>(
                 if cipher
                     .decrypt_in_place(
                         GenericArray::from_slice(&nonce),
-                        &data_frame.header.to_be_bytes(),
+                        &[
+                            data_frame.header.0,
+                            data_frame.header.1,
+                            data_frame.header.2,
+                            data_frame.header.3,
+                        ],
                         &mut crypt_payload_buf,
                     )
                     .is_ok()
@@ -170,7 +185,6 @@ pub fn to_datagram<const N: usize>(
     datagram_buf: &mut [u8; N],
 ) {
     let packed_header = header.to_packed();
-    let header_bytes = packed_header.to_be_bytes();
 
     let nonce = new_nonce(packed_header, payload_buf.len());
 
@@ -179,7 +193,12 @@ pub fn to_datagram<const N: usize>(
     cipher
         .encrypt_in_place(
             GenericArray::from_slice(&nonce),
-            &header_bytes,
+            &[
+                packed_header.0,
+                packed_header.1,
+                packed_header.2,
+                packed_header.3,
+            ],
             &mut crypt_payload_buf,
         )
         .unwrap();
@@ -224,8 +243,8 @@ mod tests {
         assert_eq!(
             datagram_buf,
             [
-                252, 255, 1, 13, 24, 136, 112, 248, 162, 24, 215, 221, 143, 115, 212, 129, 34, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                0, 1, 63, 252, 13, 145, 171, 66, 62, 129, 223, 68, 168, 6, 69, 126, 97, 64, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
             ]
         );
     }
@@ -238,8 +257,8 @@ mod tests {
         let cipher = AesCcm::new(key);
 
         let datagram_buf = [
-            252, 255, 1, 13, 24, 136, 112, 248, 162, 24, 215, 221, 143, 115, 212, 129, 34, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 1, 63, 252, 13, 145, 171, 66, 62, 129, 223, 68, 168, 6, 69, 126, 97, 64, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
 
         let (header, payload_buf) = from_datagram(
