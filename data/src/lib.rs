@@ -58,7 +58,7 @@ impl Header {
         (source << 2)
             | (((self.server_address as u32) & 0xFF) << 3)
             | (((self.server_port as u32) & 0x07) << 11)
-            | (((self.frame_counter as u32) & 0xFFFF) << 14)
+            | (((self.frame_counter as u32) & 0xFFFF) << 16)
     }
 
     /// Parse the contents of the data frame header.
@@ -75,7 +75,7 @@ impl Header {
         };
         let server_address = (header >> 3) & 0xFF;
         let server_port = (header >> 11) & 0x07;
-        let frame_counter = (header >> 14) & 0xFFFF;
+        let frame_counter = (header >> 16) & 0xFFFF;
 
         match (version, source) {
             (0, Some(source)) => Ok(Header {
@@ -99,8 +99,8 @@ pub struct DataFrame<'a> {
     /// 02..=02 source 0 = client, 1 = server
     /// 03..=10 server address
     /// 11..=13 server port
-    /// 14..=29 frame counter
-    /// 30..=31 reserved - must be zero
+    /// 14..=15 reserved - must be zero
+    /// 16..=31 frame counter
     pub header: u32,
     /// Payload data appended with a Message Authentication Code (MAC) using AES-128 CCM
     /// with a 4 byte MIC and a 7 byte nonce derived using the [new_nonce] function.
@@ -224,8 +224,8 @@ mod tests {
         assert_eq!(
             datagram_buf,
             [
-                252, 255, 1, 13, 24, 136, 112, 248, 162, 24, 215, 221, 143, 115, 212, 129, 34, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                252, 255, 4, 13, 145, 171, 66, 62, 129, 223, 68, 168, 6, 69, 126, 97, 64, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
             ]
         );
     }
@@ -238,8 +238,8 @@ mod tests {
         let cipher = AesCcm::new(key);
 
         let datagram_buf = [
-            252, 255, 1, 13, 24, 136, 112, 248, 162, 24, 215, 221, 143, 115, 212, 129, 34, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            252, 255, 4, 13, 145, 171, 66, 62, 129, 223, 68, 168, 6, 69, 126, 97, 64, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
 
         let (header, payload_buf) = from_datagram(
