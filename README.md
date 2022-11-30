@@ -86,6 +86,45 @@ The discovery process continues until there are no more invalid MICs and no more
 shown that the worst-case scenario should be 12 iterations given 255 servers. In practice, server discovery 
 often completes over 5 seconds.
 
+## Software Update
+
+Software updates are supported by broadcasting packets of chunked software, along with an address of 0x00 and a port of 0x01.
+Before any packets are sent, nominated servers (generally all) are broadcast a prepare-update command that contains a [semver](https://semver.org)-style version number and 
+a byte with a bit set for each port to which the update applies. In addition, a key for the purposes of
+broadcasting to the servers is included and known as the "update key". This key is generated for an entire update and avoids bad actors communicating 
+untrusted software updates given that the client already knows the encryption keys for each one of its servers (see [Server Discovery]).
+
+Note that although we broadcast to each server using an address of 0 (the broadcast address), only servers that are able to decrypt
+the messages will be able to handle the update request. Other servers will drop requests they are unable to decrypt.
+
+No reply is expected from these prepare-update commands. This simplifies the client logic and also speeds up the requests as no time
+must pass other than the time taken to transmit the request plus some time reserved for a server's processing e.g. 10ms is reasonable
+for a microcontroller.
+
+Each server decides whether a prepare-update command is applicable to the ports that it supports and whether the version number
+signifies a later release.
+
+Finally, the prepare-update command includes the expected number of bytes in the update so that each server knows when the update
+completes and can then act accordingly e.g. reboot with new firmware.
+
+The subsequent firmware broadcast packets contain a byte offset and the update bytes at that offset, encrypted with the update key.
+Byte offsets are conveyed starting at 0.
+
+An application-specific "flush delay" is typically determined that allows servers some period of time to perform operations such
+as, in the case of microcontrollers, writing their update buffer to flash. For example, an nRF52840 microcontroller takes 85ms to
+write 4KiB of data to its flash where 4KiB is also the minimum amount of data that can be written. In this instance, the client
+should pause for each 4KiB of update data sent, perhaps for 100ms with a microcontroller based server.
+
+The flush delay is always awaited once all update broadcast completes. This provides enough time for the final bytes to be processed
+by the server.
+
+If a server misses an update message then it will ignore all subsequent ones by dropping the shared key and thus becoming ineligible
+to receive the update.
+
+If a server updates its firmware as a consequence of this broadcast then it is also expected to emit an application-specific
+event signifying the version of the firmware it now has. The details of this event are outside of the flip-flop
+specification.
+
 ## Why flip-flop?
 
 Reason #1: data flow between a client and server "flip flops" i.e. the protocol is designed to be only be in one of two states of flow where either the client is sending and servers are receiving, or a server is sending and a client is receiving.

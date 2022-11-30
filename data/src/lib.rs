@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod discovery;
+pub mod update;
 
 use aead::{generic_array::GenericArray, AeadInPlace};
 use heapless::Vec;
