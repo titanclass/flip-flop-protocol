@@ -29,6 +29,7 @@ pub struct Identify {
 /// to be assigned to.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Identified {
+    /// The server address desired by the server.
     pub server_address: u8,
     /// A bit field representing each port supported by
     /// the server e.g. bit 1 represents that port 1 is
