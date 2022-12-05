@@ -8,9 +8,8 @@ use ccm::{
     consts::{U4, U7},
     Ccm,
 };
-use flip_flop_data::discovery::MIN_PACKET_SIZE;
 use flip_flop_data::{
-    discovery::MIN_PAYLOAD_SIZE,
+    discovery::{MIN_PACKET_SIZE, MIN_PAYLOAD_SIZE},
     from_datagram, to_datagram,
     update::{PrepareForUpdate, Update, UpdateKey, Version, UPDATE_BYTES_OVERHEAD},
     DataSource, Header,

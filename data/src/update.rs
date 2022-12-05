@@ -19,7 +19,7 @@ impl defmt::Format for UpdateKey {
 
 /// A constrained form of pre-release designators along with
 /// a numeric identifer.
-#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum PreRelease {
     Alpha(u32),
@@ -30,7 +30,7 @@ pub enum PreRelease {
 /// https://semver.org. In particular, there is no provision for a
 /// build identifier. Also, pre-releases are constrained to Alpha
 /// and Beta.
-#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct Version {
     pub major: u8,
     pub minor: u8,
