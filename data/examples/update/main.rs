@@ -15,7 +15,6 @@ use flip_flop_data::{
     DataSource, Header,
 };
 use rand::RngCore;
-use semver::Version as SemVer;
 use tokio::sync::broadcast;
 use tokio::time;
 
@@ -218,8 +217,6 @@ mod client {
 
 mod server {
 
-    use flip_flop_data::update::PreRelease;
-
     use super::*;
 
     struct UpdateInfo {
@@ -234,7 +231,7 @@ mod server {
         let (_server_address, server_network_key) = server;
         let server_cipher = AesCcm::new(GenericArray::from_slice(server_network_key));
 
-        let current_version = SemVer::new(1, 2, 0);
+        let current_version = "1.2.0".parse::<Version>().unwrap();
         let mut active_update_info: Option<UpdateInfo> = None;
 
         while let Ok(encrypted_payload) = rx.recv().await {
@@ -331,12 +328,14 @@ mod server {
 
     fn activate_update_if_new_version(
         prepare_for_update: &PrepareForUpdate,
-        current_version: &SemVer,
+        current_version: &Version,
     ) -> Option<UpdateInfo> {
-        let update_version = semver_from(&prepare_for_update.version);
         // Is this a version we're interested in? If so then note something about it.
-        if &update_version > current_version {
-            println!("SERVER: updating from {current_version} to {update_version}.");
+        if &prepare_for_update.version > current_version {
+            println!(
+                "SERVER: updating from {:?} to {:?}.",
+                current_version, prepare_for_update.version
+            );
 
             Some(UpdateInfo {
                 cipher: AesCcm::new(GenericArray::from_slice(&prepare_for_update.update_key.0)),
@@ -345,25 +344,6 @@ mod server {
             })
         } else {
             None
-        }
-    }
-
-    fn semver_from(version: &Version) -> SemVer {
-        let mut update_version = SemVer::new(
-            version.major as u64,
-            version.minor as u64,
-            version.patch as u64,
-        );
-        match version.pre {
-            Some(PreRelease::Alpha(ident)) => {
-                update_version.pre = semver::Prerelease::new(&format!("alpha.{}", ident)).unwrap();
-                update_version
-            }
-            Some(PreRelease::Beta(ident)) => {
-                update_version.pre = semver::Prerelease::new(&format!("beta.{}", ident)).unwrap();
-                update_version
-            }
-            _ => update_version,
         }
     }
 }

@@ -294,7 +294,6 @@ dependencies = [
  "heapless",
  "postcard",
  "rand",
- "semver 1.0.14",
  "serde",
  "tokio",
 ]

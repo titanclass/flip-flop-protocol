@@ -1,3 +1,5 @@
+use core::{cmp::Ordering, str::FromStr};
+
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 
@@ -19,23 +21,95 @@ impl defmt::Format for UpdateKey {
 
 /// A constrained form of pre-release designators along with
 /// a numeric identifer.
-#[derive(Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
-#[non_exhaustive]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PreRelease {
-    Alpha(u32),
-    Beta(u32),
+    Alpha(u8),
+    Beta(u8),
+}
+impl Ord for PreRelease {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (PreRelease::Alpha(self_ident), PreRelease::Alpha(other_ident)) => {
+                self_ident.cmp(other_ident)
+            }
+            (PreRelease::Alpha(_), PreRelease::Beta(_)) => Ordering::Less,
+            (PreRelease::Beta(_), PreRelease::Alpha(_)) => Ordering::Greater,
+            (PreRelease::Beta(self_ident), PreRelease::Beta(other_ident)) => {
+                self_ident.cmp(other_ident)
+            }
+        }
+    }
+}
+impl PartialOrd for PreRelease {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 /// A compact and limited representation of a version based on
 /// https://semver.org. In particular, there is no provision for a
 /// build identifier. Also, pre-releases are constrained to Alpha
-/// and Beta.
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+/// and Beta and must always have an ident.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Version {
     pub major: u8,
     pub minor: u8,
     pub patch: u8,
     pub pre: Option<PreRelease>,
+}
+#[derive(Debug)]
+pub struct ParseVersionErr;
+impl FromStr for Version {
+    type Err = ParseVersionErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (l, r) = s.split_once('.').ok_or(ParseVersionErr)?;
+        let major = l.parse::<u8>().map_err(|_| ParseVersionErr)?;
+        let (l, r) = r.split_once('.').ok_or(ParseVersionErr)?;
+        let minor = l.parse::<u8>().map_err(|_| ParseVersionErr)?;
+        let (l, r) = if let Some((l, r)) = r.split_once('-') {
+            (l, r)
+        } else {
+            (r, "")
+        };
+        let patch = l.parse::<u8>().map_err(|_| ParseVersionErr)?;
+        let pre = if let Some((_, r)) = r.split_once("alpha.") {
+            let ident = r.parse::<u8>().map_err(|_| ParseVersionErr)?;
+            Some(PreRelease::Alpha(ident))
+        } else if let Some((_, r)) = r.split_once("beta.") {
+            let ident = r.parse::<u8>().map_err(|_| ParseVersionErr)?;
+            Some(PreRelease::Beta(ident))
+        } else {
+            None
+        };
+        Ok(Self {
+            major,
+            minor,
+            patch,
+            pre,
+        })
+    }
+}
+impl Ord for Version {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.major
+            .cmp(&other.major)
+            .then(self.minor.cmp(&other.minor))
+            .then(self.patch.cmp(&other.patch))
+            .then(match (self.pre, other.pre) {
+                (None, None) => Ordering::Equal,
+                (None, Some(_)) => Ordering::Greater,
+                (Some(_), None) => Ordering::Less,
+                (Some(self_pre), Some(other_pre)) => self_pre.cmp(&other_pre),
+            })
+    }
+}
+impl PartialOrd for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 /// Prior to sending out an update, the client prepares one or more servers
@@ -81,3 +155,57 @@ pub struct Update<const N: usize> {
 /// and one byte for the length of the `update_bytes` field. `update_bytes`
 /// cannot exceed 127 bytes.
 pub const UPDATE_BYTES_OVERHEAD: usize = 4 + 1;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_versions() {
+        assert_eq!(
+            "1.2.3".parse::<Version>().unwrap(),
+            Version {
+                major: 1,
+                minor: 2,
+                patch: 3,
+                pre: None
+            }
+        );
+        assert_eq!(
+            "1.2.3-alpha.1".parse::<Version>().unwrap(),
+            Version {
+                major: 1,
+                minor: 2,
+                patch: 3,
+                pre: Some(PreRelease::Alpha(1))
+            }
+        );
+        assert_eq!(
+            "1.2.3-beta.1".parse::<Version>().unwrap(),
+            Version {
+                major: 1,
+                minor: 2,
+                patch: 3,
+                pre: Some(PreRelease::Beta(1))
+            }
+        );
+    }
+
+    #[test]
+    fn test_compare_versions() {
+        assert!("1.0.0".parse::<Version>().unwrap() == "1.0.0".parse::<Version>().unwrap());
+        assert!("1.0.0".parse::<Version>().unwrap() < "2.0.0".parse::<Version>().unwrap());
+        assert!("1.1.0".parse::<Version>().unwrap() < "1.2.0".parse::<Version>().unwrap());
+        assert!("1.1.1".parse::<Version>().unwrap() < "1.1.2".parse::<Version>().unwrap());
+        assert!("1.0.0-alpha.1".parse::<Version>().unwrap() < "1.0.0".parse::<Version>().unwrap());
+        assert!("1.0.0-beta.1".parse::<Version>().unwrap() < "1.0.0".parse::<Version>().unwrap());
+        assert!(
+            "1.0.0-alpha.1".parse::<Version>().unwrap()
+                < "1.0.0-beta.1".parse::<Version>().unwrap()
+        );
+        assert!(
+            "1.0.0-alpha.1".parse::<Version>().unwrap()
+                < "1.0.0-alpha.2".parse::<Version>().unwrap()
+        );
+    }
+}

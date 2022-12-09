@@ -19,7 +19,6 @@ aead = { version = "0.5", features = ["dev"], default-features = false }
 ccm = { version = "0.5", default-features = false, features = ["heapless"] }
 futures = "0.3"
 rand = "0.8"
-semver = { version = "1.0.14", default-features = false }
 tokio = { version = "1", features = ["full"] }
 
 [features]
