@@ -51,11 +51,7 @@ pub struct Header {
 impl Header {
     /// Returns the byte representation of the header.
     pub fn to_packed(&self) -> (u8, u8, u8, u8) {
-        let source = if self.source == DataSource::Client {
-            0
-        } else {
-            1
-        };
+        let source = u32::from(self.source == DataSource::Server);
         let header = (source << 2)
             | (((self.server_address as u32) & 0xFF) << 3)
             | (((self.server_port as u32) & 0x07) << 11)
@@ -151,7 +147,7 @@ pub fn from_datagram<const N: usize>(
             if filter(&header) {
                 let nonce = new_nonce(
                     data_frame.header,
-                    data_frame.encrypted_payload.len() - MIC_SIZE,
+                    data_frame.encrypted_payload.len().max(MIC_SIZE) - MIC_SIZE,
                 );
 
                 let mut crypt_payload_buf = Vec::new();
