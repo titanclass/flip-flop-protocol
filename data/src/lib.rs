@@ -151,7 +151,7 @@ pub fn from_datagram<const N: usize>(
             if filter(&header) {
                 let nonce = new_nonce(
                     data_frame.header,
-                    data_frame.encrypted_payload.len() - MIC_SIZE,
+                    data_frame.encrypted_payload.len().max(MIC_SIZE) - MIC_SIZE,
                 );
 
                 let mut crypt_payload_buf = Vec::new();
