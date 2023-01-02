@@ -36,7 +36,7 @@ Events also convey a time delta relative to the time at being served to diminish
 
 ## Data Link Layer
 
-A simplified data link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address for up to 255 devices, 8 server ports per device, an opaque variable length payload, and a encryption for authentication and error checking.
+A simplified data link layer protocol is also provided by this project so that flip-flop can be used where IP networks are not present e.g. with serial communications such as RS-485. This data layer provides a server address for up to 255 devices, 8 server ports per device, an opaque variable length payload, and AES-CCM encryption that includes authentication and error checking.
 
 ## Server discovery
 
@@ -85,6 +85,11 @@ corresponding server generated addresses are distinct, are added to the bit fiel
 The discovery process continues until there are no more invalid MICs and no more address conflicts. Modelling has
 shown that the worst-case scenario should be 12 iterations given 255 servers. In practice, server discovery 
 often completes over 5 seconds.
+
+Once the discovery process completes, a key can be shared to each server to be used for subsequent
+encryption. The message format and timing of this key delivery is left as an application concern, but in general,
+it should be deilvered as the first message to a new server to avoid the use of the well known key used throughout
+discovery.
 
 ## Software Update
 
