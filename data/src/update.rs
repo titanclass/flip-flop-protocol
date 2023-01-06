@@ -1,4 +1,4 @@
-use core::{cmp::Ordering, str::FromStr};
+use core::{cmp::Ordering, fmt::Display, str::FromStr};
 
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,16 @@ pub struct Version {
     pub minor: u8,
     pub patch: u8,
     pub pre: Option<PreRelease>,
+}
+impl Display for Version {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
+        match self.pre {
+            Some(PreRelease::Alpha(ident)) => write!(f, "-alpha.{}", ident),
+            Some(PreRelease::Beta(ident)) => write!(f, "-beta.{}", ident),
+            None => Ok(()),
+        }
+    }
 }
 #[derive(Debug)]
 pub struct ParseVersionErr;
@@ -206,6 +216,19 @@ mod tests {
         assert!(
             "1.0.0-alpha.1".parse::<Version>().unwrap()
                 < "1.0.0-alpha.2".parse::<Version>().unwrap()
+        );
+    }
+
+    #[test]
+    fn display_versions() {
+        assert_eq!("1.2.3".parse::<Version>().unwrap().to_string(), "1.2.3");
+        assert_eq!(
+            "1.2.3-alpha.4".parse::<Version>().unwrap().to_string(),
+            "1.2.3-alpha.4"
+        );
+        assert_eq!(
+            "1.2.3-beta.4".parse::<Version>().unwrap().to_string(),
+            "1.2.3-beta.4"
         );
     }
 }
