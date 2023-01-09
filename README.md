@@ -130,6 +130,12 @@ If a server updates its firmware as a consequence of this broadcast then it is a
 event signifying the version of the firmware it now has. The details of this event are outside of the flip-flop
 specification.
 
+### Signing
+
+The data protocol also accomodates a `signed` field. When set then the first n bytes of the update are to be interpreted as the
+digital signature. The length of the digital signature and its type are agreed between the client and server and outside of this 
+specification. It is expected that a software update should not proceed given the presence of signed data not verifying.
+
 ## Why flip-flop?
 
 Reason #1: data flow between a client and server "flip flops" i.e. the protocol is designed to be only be in one of two states of flow where either the client is sending and servers are receiving, or a server is sending and a client is receiving.
