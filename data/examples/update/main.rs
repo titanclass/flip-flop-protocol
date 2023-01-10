@@ -99,6 +99,7 @@ mod client {
                 server_ports: 1 << MY_APP_PORT,
                 update_key: UpdateKey(*update_key),
                 update_byte_len: update_len as u32,
+                signed: false,
             };
 
             create_prepare_update_request(
