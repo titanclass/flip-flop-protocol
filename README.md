@@ -132,7 +132,7 @@ specification.
 
 ### Signing
 
-The data protocol also accomodates a `signed` field. When set then the first n bytes of the update are to be interpreted as the
+The data protocol also accomodates a `signed` field. When set then the last n bytes of the update are to be interpreted as the
 digital signature. The length of the digital signature and its type are agreed between the client and server and outside of this 
 specification. It is expected that a software update should not proceed given the presence of signed data not verifying.
 

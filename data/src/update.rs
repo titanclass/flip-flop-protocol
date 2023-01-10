@@ -150,7 +150,7 @@ pub struct PrepareForUpdate {
     /// total update. This allows a server to understand if it has missed
     /// an update message and when it has received all of them.
     pub update_byte_len: u32,
-    /// When set, this will indicate that the update's first n bytes
+    /// When set, this will indicate that the update's last n bytes
     /// will contain a signature. In the case where a signature is
     /// flagged, the server must verify the bytes comprising the update.
     /// How the server does this depends on the application-specific
