@@ -16,23 +16,25 @@ A command instructs a server to do something, typically resulting in an event.  
 
 Command delivery is 'best effort'.   If the transport indicates an error then the client cannot assume the command was or was not delivered.  However the client can ascertain the state of the server and recover in an application specific way.
 
-Event delivery is reliable in the face of transport errors. Other failures, such as a server restart, are detected allowing application specific recovery.  The intent of the event delivery mechanism is that the client can track the relevant state of each server, visible through its events.
+Events can be of two types: those that are "logged" and thereby durable; and those that are ephemeral and may disappear.
 
-## Event Delivery
+Logged event delivery is reliable in the face of transport errors. Other failures, such as a server restart, are detected allowing application specific recovery.  The intent of the event delivery mechanism is that the client can track the relevant state of each server, visible through its events.
 
-A numeric _offset_ is assigned to each event by the server that generates it.  The client tracks the offset of the latest event successfully received from each server.  Each command or poll sent by the client carries this offset. The server normally responds with the following event or no event if the client's offset is up to date. 
+## Logged Event Delivery
 
-A server maintains a short history of events. This enables a client to request the same event more than once, in the case of a transport error.  In general the client can fall behind the server by the length of the history. 
+A numeric _offset_ is assigned to each event by the server that generates it. The client tracks the offset of the latest event successfully received from each server.  Each command or poll sent by the client carries this offset. The server normally responds with the following logged event, or either an ephemeral event or none if the client's offset is up to date. 
 
-A loss of synchronization between client and server occurs when neither the client's offset nor its successor is found in the server's history.  This indicates an overrun where more events were generated on the server than could be stored or delivered.  Alternatively, either the client or the server may have restarted.  In either case application specific recovery may be required.   
+A server maintains a short history of logged events. This enables a client to request the same event more than once, in the case of a transport error.  In general the client can fall behind the server by the length of the history. 
 
-The protocol requires the server to deliver the oldest event in its history in this scenario.  The client detects the loss of synchronization when the received event does not have the expected offset.
+A loss of synchronization between client and server occurs when neither the client's offset nor its successor is found in the server's history.  This indicates an overrun where more logged events were generated on the server than could be stored or delivered.  Alternatively, either the client or the server may have restarted.  In either case application specific recovery may be required.   
+
+The protocol requires the server to deliver the oldest logged event in its history in this scenario.  The client detects the loss of synchronization when the received logged event does not have the expected offset.
 
 Details of offset calculation and assignment to events are given in [offset-rules.md](offset-rules.md).
 
 ## Event Times
 
-Events also convey a time delta relative to the time at being served to diminish the effects of clock drift between a client and server. A client may then normalise an event's time with its own clock.
+Both logged and ephemeral events also convey a time delta relative to the time at being served to diminish the effects of clock drift between a client and server. A client may then normalise an event's time with its own clock.
 
 ## Data Link Layer
 

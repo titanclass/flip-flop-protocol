@@ -23,6 +23,7 @@ impl defmt::Format for UpdateKey {
 /// a numeric identifer.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub enum PreRelease {
     Alpha(u8),
     Beta(u8),

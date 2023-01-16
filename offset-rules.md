@@ -1,4 +1,4 @@
-# Event Offsets
+# Logged Event Offsets
 
 The offset of an event is a number in the range `0 ..= N-1`  assigned by a server to an event when it is generated.    
 
