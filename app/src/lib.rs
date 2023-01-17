@@ -31,7 +31,7 @@ pub struct CommandRequest<C: DeserializeOwned + Serialize> {
 }
 
 /// A temporal event is one that has its durability conveyed.
-pub trait TemporalEvent: Clone + DeserializeOwned + Serialize {}
+pub trait TemporalEvent: DeserializeOwned + Serialize {}
 
 /// An event that has been logged, providing their identifier; usually an enum. These replies convey
 /// the offset they are associated with. If an offset overflows to zero then it is the
@@ -88,7 +88,7 @@ pub struct EventReply<E: DeserializeOwned + Serialize + TemporalEvent> {
 }
 
 /// Given an event and its time, return an event reply containing it.
-pub fn event_reply<E, T, DS>(maybe_event: Option<&(E, T)>, duration_since: DS) -> EventReply<E>
+pub fn event_reply<E, T, DS>(maybe_event: Option<(E, T)>, duration_since: DS) -> EventReply<E>
 where
     DS: FnOnce(T) -> u64,
     E: TemporalEvent,
@@ -98,8 +98,8 @@ where
     // reply with a "no more events" enum and delta ticks of 0.
     maybe_event
         .map(|(e, t)| EventReply {
-            delta_ticks: duration_since(*t),
-            event: Some(e.clone()),
+            delta_ticks: duration_since(t),
+            event: Some(e),
         })
         .unwrap_or_else(|| EventReply {
             delta_ticks: 0,
@@ -190,7 +190,7 @@ mod tests {
             SomeOtherEvent,
         }
 
-        let reply = event_reply(Some(&(Logged(Event::SomeOtherEvent, 9), 0)), |_| 10);
+        let reply = event_reply(Some((Logged(Event::SomeOtherEvent, 9), 0)), |_| 10);
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
@@ -240,7 +240,7 @@ mod tests {
         }
 
         let reply: EventReply<Either<Event, Telemetry>> =
-            event_reply(Some(&(Either::Logged(Event::SomeOtherEvent, 9), 0)), |_| 10);
+            event_reply(Some((Either::Logged(Event::SomeOtherEvent, 9), 0)), |_| 10);
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
@@ -254,7 +254,7 @@ mod tests {
         );
 
         let reply: EventReply<Either<Event, Telemetry>> = event_reply(
-            Some(&(Either::Ephemeral(Telemetry::SomeTelemetry), 0)),
+            Some((Either::Ephemeral(Telemetry::SomeTelemetry), 0)),
             |_| 10,
         );
 

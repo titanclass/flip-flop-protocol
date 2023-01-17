@@ -76,10 +76,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let next_e = events_iter.next();
                     let last_e = events_iter.next();
                     let maybe_event = match (next_e, last_e) {
-                        (Some((Logged(_, o), _)), _) if *o == next_event_offset => next_e,
+                        (Some((Logged(_, o), _)), _) if *o == next_event_offset => next_e.cloned(),
                         (_, Some((Logged(_, o), _))) if *o == request.last_event_offset => None,
                         (Some((Logged(_, o), _)), _) if *o == request.last_event_offset => None,
-                        _ => events.iter().last(),
+                        _ => events.iter().last().cloned(),
                     };
 
                     let reply = flip_flop_app::event_reply(maybe_event, |t|Instant::now().duration_since(t).as_secs());
