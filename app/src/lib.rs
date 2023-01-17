@@ -30,15 +30,42 @@ pub struct CommandRequest<C: DeserializeOwned + Serialize> {
     pub command: Option<C>,
 }
 
-/// An EventRequest may only be emitted by a server, of which there can be many, and
-/// only in relation to having received a [CommandRequest] from a client. Event requests
-/// take a type that provides their identifier; usually an enum. Event requests convey
+/// A temporal event is one that has its durability conveyed.
+pub trait TemporalEvent: DeserializeOwned + Serialize {}
+
+/// An event that has been logged, providing their identifier; usually an enum. These replies convey
 /// the offset they are associated with. If an offset overflows to zero then it is the
 /// server's responsibility to convey any important events that the client may need.
 /// It is the client's responsibility to clear state in relation to previous events when
-/// an offset less than or equal to the one it requested. An event request also conveys a
+/// an offset less than or equal to the one it requested is received. An event request also conveys a
 /// delta in time in a form that the client and its servers understand, and relative to
 /// the server's current notion of time.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Logged<E>(pub E, pub u32);
+impl<E: Clone + DeserializeOwned + Serialize> TemporalEvent for Logged<E> {}
+
+/// An event that has not been logged by the server and may be consumed by the client,
+/// often to convey some instantaneous event that does not need to be recorded. Events
+/// of this category should be benign if they are not consumed by a client.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Ephemeral<E>(pub E);
+impl<E: Clone + DeserializeOwned + Serialize> TemporalEvent for Ephemeral<E> {}
+
+/// Either a logged or an ephemeral event can be declared for use.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub enum EventOf<E, EE> {
+    Logged(E, u32),
+    Ephemeral(EE),
+}
+impl<E: Clone + DeserializeOwned + Serialize, EE: Clone + DeserializeOwned + Serialize>
+    TemporalEvent for EventOf<E, EE>
+{
+}
+
+/// An EventRequest may only be emitted by a server, of which there can be many, and
+/// only in relation to having received a [CommandRequest] from a client. Event replies
+/// take a temporal type that conveys their durability.
 ///
 /// An EventReply has the following little endian byte layout:
 ///
@@ -47,35 +74,32 @@ pub struct CommandRequest<C: DeserializeOwned + Serialize> {
 /// |          delta_ticks          | event |
 ///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct EventReply<E: DeserializeOwned + Serialize> {
+pub struct EventReply<E: TemporalEvent> {
     /// The age of this event in relation to the server's notion of current time,
     /// expressed in a manner agreed between a client and server e.g. ticks can
     /// represent seconds.
     pub delta_ticks: u64,
-    /// The event to reply along with its offset. Offsets are expected to increment
-    /// by one each time. Therefore, it is possible for a client to determine if
-    /// there is an event missing and possibly re-request it.
+    /// The event to reply.
     #[serde(
         deserialize_with = "deserialise_last_field",
         serialize_with = "serialise_last_field"
     )]
-    pub event: Option<(E, u32)>,
+    pub event: Option<E>,
 }
 
-/// Given an event, offset and time, return an event reply containing it.
-pub fn event_reply<E, T, DS>(maybe_event: Option<&(E, u32, T)>, duration_since: DS) -> EventReply<E>
+/// Given an event and its time, return an event reply containing it.
+pub fn event_reply<E, T, DS>(maybe_event: Option<(E, T)>, duration_since: DS) -> EventReply<E>
 where
     DS: FnOnce(T) -> u64,
-    E: Clone + DeserializeOwned + Serialize,
+    E: TemporalEvent,
     T: Copy,
 {
     // It is quite plausible that we have no events. In this case we
-    // reply with a "no more events" enum, an offset of 0 and a delta
-    // ticks of 0.
+    // reply with a "no more events" enum and delta ticks of 0.
     maybe_event
-        .map(|(e, o, t)| EventReply {
-            delta_ticks: duration_since(*t),
-            event: Some((e.clone(), *o)),
+        .map(|(e, t)| EventReply {
+            delta_ticks: duration_since(t),
+            event: Some(e),
         })
         .unwrap_or_else(|| EventReply {
             delta_ticks: 0,
@@ -166,16 +190,16 @@ mod tests {
             SomeOtherEvent,
         }
 
-        let reply = event_reply(Some(&(Event::SomeOtherEvent, 9, 0)), |_| 10);
+        let reply = event_reply(Some((Logged(Event::SomeOtherEvent, 9), 0)), |_| 10);
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
         assert_eq!(serialised, [10, 1, 9]);
         assert_eq!(
-            postcard::from_bytes::<EventReply<Event>>(serialised).unwrap(),
+            postcard::from_bytes::<EventReply<Logged<Event>>>(serialised).unwrap(),
             EventReply {
                 delta_ticks: 10,
-                event: Some((Event::SomeOtherEvent, 9)),
+                event: Some(Logged(Event::SomeOtherEvent, 9)),
             }
         );
     }
@@ -188,16 +212,60 @@ mod tests {
             SomeOtherEvent,
         }
 
-        let reply = event_reply::<Event, u32, _>(None, |_| 10);
+        let reply: EventReply<Logged<Event>> = event_reply(None, |_: i32| 10);
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
         assert_eq!(serialised, [0]);
         assert_eq!(
-            postcard::from_bytes::<EventReply<Event>>(serialised).unwrap(),
+            postcard::from_bytes::<EventReply<Logged<Event>>>(serialised).unwrap(),
             EventReply {
                 delta_ticks: 0,
                 event: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_event_serialisation_with_either() {
+        #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+        enum Event {
+            SomeEvent,
+            SomeOtherEvent,
+        }
+
+        #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+        enum Telemetry {
+            SomeTelemetry,
+        }
+
+        let reply: EventReply<EventOf<Event, Telemetry>> =
+            event_reply(Some((EventOf::Logged(Event::SomeOtherEvent, 9), 0)), |_| 10);
+
+        let mut buf = [0; 32];
+        let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
+        assert_eq!(serialised, [10, 0, 1, 9]);
+        assert_eq!(
+            postcard::from_bytes::<EventReply<EventOf<Event, Telemetry>>>(serialised).unwrap(),
+            EventReply {
+                delta_ticks: 10,
+                event: Some(EventOf::Logged(Event::SomeOtherEvent, 9)),
+            }
+        );
+
+        let reply: EventReply<EventOf<Event, Telemetry>> = event_reply(
+            Some((EventOf::Ephemeral(Telemetry::SomeTelemetry), 0)),
+            |_| 10,
+        );
+
+        let mut buf = [0; 32];
+        let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
+        assert_eq!(serialised, [10, 1, 0]);
+        assert_eq!(
+            postcard::from_bytes::<EventReply<EventOf<Event, Telemetry>>>(serialised).unwrap(),
+            EventReply {
+                delta_ticks: 10,
+                event: Some(EventOf::Ephemeral(Telemetry::SomeTelemetry)),
             }
         );
     }

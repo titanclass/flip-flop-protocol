@@ -2,7 +2,7 @@ use circular_queue::CircularQueue;
 use rand::prelude::*;
 use std::{env, error::Error, net::SocketAddr, time::Duration};
 
-use flip_flop_app::CommandRequest;
+use flip_flop_app::{CommandRequest, Logged};
 use tokio::{
     net::UdpSocket,
     sync::mpsc,
@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     const MAX_EVENTS: usize = 10;
 
     let mut recv_buf = [0; MAX_DATAGRAM_SIZE];
-    let mut events = CircularQueue::<(Event, u32, Instant)>::with_capacity(MAX_EVENTS);
+    let mut events = CircularQueue::<(Logged<Event>, Instant)>::with_capacity(MAX_EVENTS);
 
     // Randomise the starting offset to increase the probably of a client
     // detecting that a server has started up.
@@ -72,14 +72,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let mut events_iter =
                         events
                         .iter()
-                        .skip_while(|e| e.1 != next_event_offset && e.1 != request.last_event_offset);
+                        .skip_while(|(Logged(_, o), _)| *o != next_event_offset && *o != request.last_event_offset);
                     let next_e = events_iter.next();
                     let last_e = events_iter.next();
                     let maybe_event = match (next_e, last_e) {
-                        (Some(e), _) if e.1 == next_event_offset => next_e,
-                        (_, Some(e)) if e.1 == request.last_event_offset => None,
-                        (Some(e), _) if e.1 == request.last_event_offset => None,
-                        _ => events.iter().last(),
+                        (Some((Logged(_, o), _)), _) if *o == next_event_offset => next_e.cloned(),
+                        (_, Some((Logged(_, o), _))) if *o == request.last_event_offset => None,
+                        (Some((Logged(_, o), _)), _) if *o == request.last_event_offset => None,
+                        _ => events.iter().last().cloned(),
                     };
 
                     let reply = flip_flop_app::event_reply(maybe_event, |t|Instant::now().duration_since(t).as_secs());
@@ -101,7 +101,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     event_offset = rand::thread_rng().gen_range(0..MAX_EVENTS) as u32;
                 } else {
                     println!("SERVER: event stored for offset {}", event_offset);
-                    events.push((Event::SomeEvent, event_offset, event_instant));
+                    events.push((Logged(Event::SomeEvent, event_offset), event_instant));
                     event_offset = event_offset.wrapping_add(1);
                 }
             }

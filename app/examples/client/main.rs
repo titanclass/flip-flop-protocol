@@ -1,7 +1,7 @@
 use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
 
 use chrono::Local;
-use flip_flop_app::{CommandRequest, EventReply};
+use flip_flop_app::{CommandRequest, EventReply, Logged};
 use tokio::{
     net::UdpSocket,
     time::{self, Instant},
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         if let Ok(Ok((len, remote_addr))) =
             time::timeout(Duration::from_millis(100), r.recv_from(&mut recv_buf)).await
         {
-            if let Ok(reply) = postcard::from_bytes::<EventReply<Event>>(&recv_buf[..len]) {
+            if let Ok(reply) = postcard::from_bytes::<EventReply<Logged<Event>>>(&recv_buf[..len]) {
                 if let Some(local_time) = Local::now().checked_sub_signed(
                     chrono::Duration::from_std(Duration::from_secs(reply.delta_ticks))
                         .unwrap_or(chrono::Duration::seconds(0)),
@@ -86,13 +86,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 let expected_event_offset = last_event_offset.wrapping_add(1);
                 match reply.event {
-                    Some((_, offset)) if offset != expected_event_offset => {
+                    Some(Logged(_, offset)) if offset != expected_event_offset => {
                         init_mode = true;
                         event_count = 0;
                         last_event_offset = offset;
                         println!("CLIENT: Previous events for this server are now forgotten given an offset != what we expected");
                     }
-                    Some((_, offset)) => {
+                    Some(Logged(_, offset)) => {
                         event_count = event_count.wrapping_add(1);
                         last_event_offset = offset;
                     }
