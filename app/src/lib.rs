@@ -54,12 +54,12 @@ impl<E: Clone + DeserializeOwned + Serialize> TemporalEvent for Ephemeral<E> {}
 /// Either a logged or an ephemeral event can be declared for use.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
-pub enum Either<E, EE> {
+pub enum EventOf<E, EE> {
     Logged(E, u32),
     Ephemeral(EE),
 }
 impl<E: Clone + DeserializeOwned + Serialize, EE: Clone + DeserializeOwned + Serialize>
-    TemporalEvent for Either<E, EE>
+    TemporalEvent for EventOf<E, EE>
 {
 }
 
@@ -74,7 +74,7 @@ impl<E: Clone + DeserializeOwned + Serialize, EE: Clone + DeserializeOwned + Ser
 /// |          delta_ticks          | event |
 ///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct EventReply<E: DeserializeOwned + Serialize + TemporalEvent> {
+pub struct EventReply<E: TemporalEvent> {
     /// The age of this event in relation to the server's notion of current time,
     /// expressed in a manner agreed between a client and server e.g. ticks can
     /// represent seconds.
@@ -239,22 +239,22 @@ mod tests {
             SomeTelemetry,
         }
 
-        let reply: EventReply<Either<Event, Telemetry>> =
-            event_reply(Some((Either::Logged(Event::SomeOtherEvent, 9), 0)), |_| 10);
+        let reply: EventReply<EventOf<Event, Telemetry>> =
+            event_reply(Some((EventOf::Logged(Event::SomeOtherEvent, 9), 0)), |_| 10);
 
         let mut buf = [0; 32];
         let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
         assert_eq!(serialised, [10, 0, 1, 9]);
         assert_eq!(
-            postcard::from_bytes::<EventReply<Either<Event, Telemetry>>>(serialised).unwrap(),
+            postcard::from_bytes::<EventReply<EventOf<Event, Telemetry>>>(serialised).unwrap(),
             EventReply {
                 delta_ticks: 10,
-                event: Some(Either::Logged(Event::SomeOtherEvent, 9)),
+                event: Some(EventOf::Logged(Event::SomeOtherEvent, 9)),
             }
         );
 
-        let reply: EventReply<Either<Event, Telemetry>> = event_reply(
-            Some((Either::Ephemeral(Telemetry::SomeTelemetry), 0)),
+        let reply: EventReply<EventOf<Event, Telemetry>> = event_reply(
+            Some((EventOf::Ephemeral(Telemetry::SomeTelemetry), 0)),
             |_| 10,
         );
 
@@ -262,10 +262,10 @@ mod tests {
         let serialised = postcard::to_slice(&reply, &mut buf).unwrap();
         assert_eq!(serialised, [10, 1, 0]);
         assert_eq!(
-            postcard::from_bytes::<EventReply<Either<Event, Telemetry>>>(serialised).unwrap(),
+            postcard::from_bytes::<EventReply<EventOf<Event, Telemetry>>>(serialised).unwrap(),
             EventReply {
                 delta_ticks: 10,
-                event: Some(Either::Ephemeral(Telemetry::SomeTelemetry)),
+                event: Some(EventOf::Ephemeral(Telemetry::SomeTelemetry)),
             }
         );
     }
