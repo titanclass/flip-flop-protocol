@@ -22,13 +22,11 @@ Logged event delivery is reliable in the face of transport errors. Other failure
 
 ## Logged Event Delivery
 
-A numeric _offset_ is assigned to each event by the server that generates it. The client tracks the offset of the latest event successfully received from each server.  Each command or poll sent by the client carries this offset. The server normally responds with the following logged event, or either an ephemeral event or none if the client's offset is up to date. 
+A numeric _offset_ is assigned to each event by the server that generates it. The client tracks the offset of the latest event successfully received from each server.  Each command or poll sent by the client carries this offset. The server normally responds with the following logged event, or either an ephemeral event, an event indicating client-side state recovery, or none if the client's offset is up to date. 
 
 A server maintains a short history of logged events. This enables a client to request the same event more than once, in the case of a transport error.  In general the client can fall behind the server by the length of the history. 
 
-A loss of synchronization between client and server occurs when neither the client's offset nor its successor is found in the server's history.  This indicates an overrun where more logged events were generated on the server than could be stored or delivered.  Alternatively, either the client or the server may have restarted.  In either case application specific recovery may be required.   
-
-The protocol requires the server to deliver the oldest logged event in its history in this scenario.  The client detects the loss of synchronization when the received logged event does not have the expected offset.
+A loss of synchronization between client and server occurs when neither the client's offset nor its successor is found in the server's history.  This indicates an overrun where more logged events were generated on the server than could be stored or delivered.  Alternatively, either the client or the server may have restarted.  In either case application specific recovery may be required and is signalled by a special "recovery" event.
 
 Details of offset calculation and assignment to events are given in [offset-rules.md](offset-rules.md).
 

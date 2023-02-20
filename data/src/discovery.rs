@@ -253,8 +253,7 @@ mod tests {
                 .iter()
                 .enumerate()
                 .skip(1)
-                .skip_while(|(_, is_set)| !*is_set)
-                .next(),
+                .find(|(_, is_set)| *is_set),
             Some((3, true))
         );
     }

@@ -33,7 +33,7 @@ jobs:
     - name: Lint
       env:
         RUSTFLAGS: -Dwarnings
-      run: cargo clippy
+      run: cargo clippy --tests
 
     - name: Format
       run: cargo fmt -- --check

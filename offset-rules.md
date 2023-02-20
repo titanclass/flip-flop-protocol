@@ -18,7 +18,7 @@ Case |Condition |Response
 -|-|-
 1 |Event `s(n)` is present in history |Event `s(n)` 
 2 |Event `n` is present in history and event `s(n)` is not | No event
-3 |Otherwise |Earliest event available, offset `n0`
+3 |Otherwise |A recovery event conveying the start (n0) and end (n1) offsets available
 
 The client interprets the response as follows:
 
@@ -26,10 +26,12 @@ Case |Interpretation |Next Action
 -|-|-
 1 |Success |Poll with offset `s(n)`
 2 |Success |Poll or command with offset `n`
-3 |Failure |Application specific recovery, poll or command with offset `n0`
+3 |Failure |Recovery of client state from event by polling with offset `n0` upto and including offset `n1`.
 Transport error |Failure |Poll with offset `n`
 
-Case 3 indicates that the client or server has restarted or the server event buffer has overrun and a number of events have been lost.  If the client tracks some aspect of the server's state this must be recovered.  The means to do this are application specific.
+Case 3 indicates that the client or server has restarted or the server event buffer has overrun and a number of events have been lost. If the client tracks some aspect of the server's state this must be recovered. The means to do this are application specific, although given a start and end offset, a client can detect when it is in a recovery phase. A recovery
+phase begins on receipt of an event indicating the start and end offsets and continues while the client consumes events
+from the start offset up to and including the end offset.
 
 Note that the server has to generate at least one event after restart for the restart to be detected.
 

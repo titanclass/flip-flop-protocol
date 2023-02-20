@@ -1,7 +1,7 @@
 use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
 
 use chrono::Local;
-use flip_flop_app::{CommandRequest, EventReply, Logged};
+use flip_flop_app::{CommandRequest, EventOf, EventReply, NoEE};
 use tokio::{
     net::UdpSocket,
     time::{self, Instant},
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // framing.
     const MAX_DATAGRAM_SIZE: usize = 32;
 
-    let mut last_event_offset = 0_u32;
+    let mut last_event_offset = None;
     let mut event_count = 0_u32;
 
     println!("CLIENT: listening on {:?}", local_addr);
@@ -43,6 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut next_send_time = Instant::now();
 
     let mut init_mode = true;
+    let mut recovery_event_offset = None;
 
     loop {
         // Wake at a regular interval which is what we need to do
@@ -74,7 +75,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         if let Ok(Ok((len, remote_addr))) =
             time::timeout(Duration::from_millis(100), r.recv_from(&mut recv_buf)).await
         {
-            if let Ok(reply) = postcard::from_bytes::<EventReply<Logged<Event>>>(&recv_buf[..len]) {
+            if let Ok(reply) =
+                postcard::from_bytes::<EventReply<EventOf<Event, NoEE>>>(&recv_buf[..len])
+            {
                 if let Some(local_time) = Local::now().checked_sub_signed(
                     chrono::Duration::from_std(Duration::from_secs(reply.delta_ticks))
                         .unwrap_or(chrono::Duration::seconds(0)),
@@ -84,19 +87,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         local_time, reply, event_count, remote_addr
                     );
                 }
-                let expected_event_offset = last_event_offset.wrapping_add(1);
                 match reply.event {
-                    Some(Logged(_, offset)) if offset != expected_event_offset => {
+                    Some(EventOf::Recovery(start, end)) => {
+                        println!("CLIENT: Previous events for this server are now forgotten given an offset != what we expected.");
                         init_mode = true;
                         event_count = 0;
-                        last_event_offset = offset;
-                        println!("CLIENT: Previous events for this server are now forgotten given an offset != what we expected");
+                        last_event_offset = Some(start);
+                        recovery_event_offset = if start != end {
+                            println!("CLIENT: Recovering.");
+                            Some(end)
+                        } else {
+                            println!("CLIENT: Recovery complete.");
+                            None
+                        };
                     }
-                    Some(Logged(_, offset)) => {
+                    Some(EventOf::Logged(_, offset)) => {
                         event_count = event_count.wrapping_add(1);
-                        last_event_offset = offset;
+                        last_event_offset = Some(offset);
+                        if last_event_offset == recovery_event_offset {
+                            println!("CLIENT: Recovery complete.");
+                            init_mode = true;
+                        }
                     }
-                    None => init_mode = false,
+                    _ => (),
                 }
             }
         }
