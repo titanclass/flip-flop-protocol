@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// The size of a data frame header including the byte length for the payload.
 /// The byte length value is not to exceed 127.
-pub const HEADER_SIZE: usize = 5;
+pub const HEADER_SIZE: usize = 6;
 
 /// The size of the MIC code at the tail of the payload
 pub const MIC_SIZE: usize = 4;

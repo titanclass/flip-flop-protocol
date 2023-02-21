@@ -64,8 +64,8 @@ impl Display for Version {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
         match self.pre {
-            Some(PreRelease::Alpha(ident)) => write!(f, "-alpha.{}", ident),
-            Some(PreRelease::Beta(ident)) => write!(f, "-beta.{}", ident),
+            Some(PreRelease::Alpha(ident)) => write!(f, "-alpha.{ident}"),
+            Some(PreRelease::Beta(ident)) => write!(f, "-beta.{ident}"),
             None => Ok(()),
         }
     }
