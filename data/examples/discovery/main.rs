@@ -116,6 +116,7 @@ mod client {
             |h| h.server_address == 0x00 && h.server_port == 0x00 && h.source == DataSource::Server,
             cipher,
         )
+        .ok()
         .and_then(|(_, b)| postcard::from_bytes::<Identified>(&b).ok())
     }
 }
@@ -164,6 +165,7 @@ mod server {
             |h| h.server_address == 0x00 && h.server_port == 0x00 && h.source == DataSource::Client,
             cipher,
         )
+        .ok()
         .and_then(|(_, b)| postcard::from_bytes::<Identify>(&b).ok())
     }
 

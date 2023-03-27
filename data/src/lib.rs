@@ -28,7 +28,7 @@ pub enum DataSource {
 /// There was an error parsing the data frame's header. Possibly due
 /// to an incompatible data frame version.
 #[derive(Debug, Eq, PartialEq)]
-pub struct ParseError {}
+pub struct HeaderParseError {}
 
 /// The haader fields of the data frame.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -69,7 +69,7 @@ impl Header {
     /// then an error is returned. Otherwise, the header
     /// and encrypted payload (including a MAC at the end)
     /// are returned.
-    pub fn parse(header: (u8, u8, u8, u8)) -> Result<Header, ParseError> {
+    pub fn parse(header: (u8, u8, u8, u8)) -> Result<Header, HeaderParseError> {
         let header = ((header.0 as u32) << 24)
             | ((header.1 as u32) << 16)
             | ((header.2 as u32) << 8)
@@ -92,7 +92,7 @@ impl Header {
                 server_port: server_port as _,
                 frame_counter: frame_counter as _,
             }),
-            _ => Err(ParseError {}),
+            _ => Err(HeaderParseError {}),
         }
     }
 }
@@ -135,42 +135,54 @@ pub fn new_nonce(header: (u8, u8, u8, u8), payload_len: usize) -> [u8; 7] {
     ]
 }
 
+/// Problems in relation to decoding a datagram
+#[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum FromDatagramError {
+    CannotParseDataFrame(postcard::Error),
+    CannotParseHeader,
+    FilterDoesNotMatch,
+    CannotDecrypt,
+}
+
 /// Conveniently decodes a datagram with a fixed length of N given a condition and,
 /// if successful, validates the header and decrypts the payload.
 pub fn from_datagram<const N: usize>(
     datagram_buf: &[u8; N],
     filter: impl FnOnce(&Header) -> bool,
     cipher: &impl AeadInPlace,
-) -> Option<(Header, Vec<u8, N>)> {
-    if let Ok(data_frame) = postcard::from_bytes::<DataFrame>(datagram_buf) {
-        if let Ok(header) = Header::parse(data_frame.header) {
-            if filter(&header) {
-                let nonce = new_nonce(
-                    data_frame.header,
-                    data_frame.encrypted_payload.len().max(MIC_SIZE) - MIC_SIZE,
-                );
+) -> Result<(Header, Vec<u8, N>), FromDatagramError> {
+    let data_frame = postcard::from_bytes::<DataFrame>(datagram_buf)
+        .map_err(FromDatagramError::CannotParseDataFrame)?;
 
-                let mut crypt_payload_buf = Vec::new();
-                let _ = crypt_payload_buf.extend_from_slice(data_frame.encrypted_payload);
-                if cipher
-                    .decrypt_in_place(
-                        GenericArray::from_slice(&nonce),
-                        &[
-                            data_frame.header.0,
-                            data_frame.header.1,
-                            data_frame.header.2,
-                            data_frame.header.3,
-                        ],
-                        &mut crypt_payload_buf,
-                    )
-                    .is_ok()
-                {
-                    return Some((header, crypt_payload_buf));
-                }
-            }
-        }
+    let header =
+        Header::parse(data_frame.header).map_err(|_| FromDatagramError::CannotParseHeader)?;
+
+    if !filter(&header) {
+        return Err(FromDatagramError::FilterDoesNotMatch);
     }
-    None
+
+    let nonce = new_nonce(
+        data_frame.header,
+        data_frame.encrypted_payload.len().max(MIC_SIZE) - MIC_SIZE,
+    );
+
+    let mut crypt_payload_buf = Vec::new();
+    let _ = crypt_payload_buf.extend_from_slice(data_frame.encrypted_payload);
+    cipher
+        .decrypt_in_place(
+            GenericArray::from_slice(&nonce),
+            &[
+                data_frame.header.0,
+                data_frame.header.1,
+                data_frame.header.2,
+                data_frame.header.3,
+            ],
+            &mut crypt_payload_buf,
+        )
+        .map_err(|_| FromDatagramError::CannotDecrypt)?;
+
+    Ok((header, crypt_payload_buf))
 }
 
 /// Conveniently encrypts a payload and encodes the header and encrypted payload into

@@ -275,6 +275,7 @@ mod server {
             |h| h.server_address == 0x00 && h.server_port == 0x01 && h.source == DataSource::Client,
             cipher,
         )
+        .ok()
         .and_then(|(_, b)| postcard::from_bytes::<Update<N>>(&b).ok())
     }
 
@@ -324,6 +325,7 @@ mod server {
             |h| h.server_address == 0x00 && h.server_port == 0x01 && h.source == DataSource::Client,
             cipher,
         )
+        .ok()
         .and_then(|(_, b)| postcard::from_bytes::<PrepareForUpdate>(&b).ok())
     }
 
